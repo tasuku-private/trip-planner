@@ -265,7 +265,7 @@ window.MAP_PINS = {
 <!-- All JSX inlined -->
 <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useMemo } = React;
-const GEMINI_KEY = 'AIzaSyAUkgnQxq83jbWy4yOWrCGUgOiEv6p0yvY';
+let GEMINI_KEY = '';
 
 // ─── iOS Frame ───────────────────────────────────────────
 function IOSStatusBar({ dark = false, time = '9:41' }) {
@@ -440,7 +440,7 @@ function TimelineDay({ day, onSpotTap, activeSpot }) {
 }
 
 // ─── Home Screen ─────────────────────────────────────────
-function HomeScreen({ onGenerate, state, setState, error }) {
+function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
   const [spotInput, setSpotInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(false);
@@ -620,7 +620,10 @@ function HomeScreen({ onGenerate, state, setState, error }) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="white"/></svg>
           3つのプランを生成する
         </button>
-        <div style={{ textAlign: 'center', fontSize: 10, color: '#a5a5a5', marginTop: 8 }} className="mono">Powered by Gemini</div>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 8 }}>
+          <div className="mono" style={{ fontSize: 10, color: '#a5a5a5' }}>Powered by Gemini</div>
+          <button onClick={onResetKey} style={{ border: 'none', background: 'transparent', fontSize: 10, color: '#c0bdb7', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>APIキー変更</button>
+        </div>
       </div>
     </div>
   );
@@ -784,8 +787,7 @@ function AIChat({ onClose, plan, onApply }) {
 
   useEffect(() => { bottomRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }); }, [messages, thinking]);
 
-  const GEMINI_API_KEY = 'AIzaSyAUkgnQxq83jbWy4yOWrCGUgOiEv6p0yvY';
-  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
 
   const callGemini = async (userText) => {
     const systemPrompt = `あなたは旅行プランナーAIアシスタントです。
@@ -967,6 +969,43 @@ function ShareScreen({ plan, onBack, onDone }) {
   );
 }
 
+// ─── API Key Screen ───────────────────────────────────────
+function ApiKeyScreen({ onSave }) {
+  const [key, setKey] = useState('');
+  const save = () => {
+    const k = key.trim();
+    if (!k) return;
+    localStorage.setItem('gemini_api_key', k);
+    GEMINI_KEY = k;
+    onSave(k);
+  };
+  return (
+    <div className="screen fade-in" style={{ background: '#faf8f4', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>Gemini APIキーを設定</div>
+          <div style={{ fontSize: 13, color: '#7a7a7a', marginTop: 10, lineHeight: 1.7 }}>
+            Google AI Studioで発行したAPIキーを入力してください。<br/>キーはこのブラウザにのみ保存され、外部には送信されません。
+          </div>
+        </div>
+        <input
+          value={key}
+          onChange={e => setKey(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && save()}
+          placeholder="AIzaSy..."
+          style={{ width: '100%', border: '1px solid #e8e4dc', borderRadius: 12, padding: '14px 16px', fontSize: 13, fontFamily: 'JetBrains Mono, monospace', outline: 'none', background: 'white', boxSizing: 'border-box' }}
+        />
+        <button onClick={save} disabled={!key.trim()} style={{ width: '100%', marginTop: 10, padding: '16px', borderRadius: 14, border: 'none', background: key.trim() ? '#141414' : '#d5d1c8', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'inherit', cursor: key.trim() ? 'pointer' : 'not-allowed' }}>
+          保存して始める
+        </button>
+        <div style={{ fontSize: 11, color: '#a5a5a5', marginTop: 12, textAlign: 'center', lineHeight: 1.7 }}>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: '#3B5BA5' }}>Google AI Studio</a> でAPIキーを取得できます
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Plan Generation ─────────────────────────────────────
 async function generatePlansWithGemini(tripState) {
   const { destination, nights, people, spots, hotels, hotelMode, startDate } = tripState;
@@ -1033,6 +1072,11 @@ async function generatePlansWithGemini(tripState) {
 
 // ─── App ──────────────────────────────────────────────────
 function App() {
+  const [apiKey, setApiKey] = useState(() => {
+    const k = localStorage.getItem('gemini_api_key') || '';
+    GEMINI_KEY = k;
+    return k;
+  });
   const [screen, setScreen] = useState('home');
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -1065,12 +1109,16 @@ function App() {
 
   const renderScreen = () => {
     switch (screen) {
-      case 'home':   return <HomeScreen state={tripState} setState={setTripState} onGenerate={handleGenerate} error={genError}/>;
+      case 'home':   return <HomeScreen state={tripState} setState={setTripState} onGenerate={handleGenerate} error={genError} onResetKey={() => { localStorage.removeItem('gemini_api_key'); GEMINI_KEY = ''; setApiKey(''); }}/>;
       case 'detail': return <DetailScreen plan={selectedPlan || PLANS[0]} onPlanChange={p => setSelectedPlan(p)} onBack={() => go('home')} onShare={() => go('share')} onAIChat={() => setShowAI(true)}/>;
       case 'share':  return <ShareScreen plan={selectedPlan || PLANS[0]} onBack={() => go('detail')} onDone={() => go('detail')}/>;
       default:       return <HomeScreen state={tripState} setState={setTripState} onGenerate={handleGenerate} error={genError}/>;
     }
   };
+
+  if (!apiKey) return (
+    <div className="stage"><ApiKeyScreen onSave={k => setApiKey(k)}/></div>
+  );
 
   return (
     <div className="stage">
