@@ -32,17 +32,11 @@ html, body {
 .mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace; letter-spacing: 0; }
 .serif { font-family: 'Noto Serif JP', 'Noto Serif', serif; }
 .stage {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 24px; gap: 48px;
+  width: 100%; height: 100vh;
 }
-.stage-bg {
-  position: fixed; inset: 0;
-  background: radial-gradient(1200px 600px at 20% 10%, rgba(59,91,165,0.06), transparent 60%),
-              radial-gradient(900px 500px at 80% 90%, rgba(163,75,59,0.05), transparent 60%), #e8e4dc;
-  z-index: -1;
-}
+.stage-bg { display: none; }
 .screen {
-  width: 100%; height: 100%; background: var(--bg);
+  width: 100%; height: 100vh; background: var(--bg);
   overflow: hidden; position: relative; display: flex; flex-direction: column;
 }
 .btn {
@@ -947,33 +941,10 @@ function App() {
     }
   };
 
-  const navItem = (label, target, count) => (
-    <button onClick={() => setScreen(target)} style={{ border: 'none', background: screen === target ? '#141414' : 'transparent', color: screen === target ? 'white' : '#7a7a7a', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit' }}>
-      <span style={{ opacity: 0.6, marginRight: 4 }}>{count}</span>{label}
-    </button>
-  );
-
   return (
     <div className="stage">
-      <div style={{ position: 'fixed', top: 20, left: 20, zIndex: 10, background: 'white', borderRadius: 12, padding: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.06)', fontFamily: 'JetBrains Mono, monospace' }}>
-        <div style={{ fontSize: 10, color: '#a5a5a5', marginBottom: 6, letterSpacing: '0.08em' }}>TRIPCRAFT · v0.1</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {navItem('入力',   'home',    '01')}
-          {navItem('生成中', 'loading', '02')}
-          {navItem('プラン', 'detail',  '03')}
-          {navItem('共有',   'share',   '04')}
-        </div>
-      </div>
-
-      <IOSDevice width={402} height={874}>
-        {renderScreen()}
-        {showAI && <AIChat onClose={() => setShowAI(false)} plan={selectedPlan || PLANS[0]} onApply={() => setShowAI(false)}/>}
-      </IOSDevice>
-
-      <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10, maxWidth: 260, fontSize: 11, color: '#555', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)', padding: 12, borderRadius: 10, border: '1px solid #e8e4dc', fontFamily: 'Noto Sans JP' }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>TripCraft プロトタイプ</div>
-        <div style={{ lineHeight: 1.5 }}>石川3泊4日の例。左のナビで画面遷移、プラン詳細の上部タブでAIが提案した3つのプランを切り替え。右下の「調整」ボタンからAIで修正。</div>
-      </div>
+      {renderScreen()}
+      {showAI && <AIChat onClose={() => setShowAI(false)} plan={selectedPlan || PLANS[0]} onApply={() => setShowAI(false)}/>}
     </div>
   );
 }
