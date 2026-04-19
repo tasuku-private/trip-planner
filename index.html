@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>TripCraft — 旅行計画アプリ</title>
+<meta name="viewport" content="width=1200, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Serif+JP:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #141414;
+  --ink-2: #3a3a3a;
+  --muted: #7a7a7a;
+  --muted-2: #a5a5a5;
+  --line: #e8e6e2;
+  --line-2: #efede8;
+  --bg: #faf8f4;
+  --card: #ffffff;
+  --accent: #2b3a67;
+  --accent-2: #3B5BA5;
+  --warm: #b6876a;
+  --green: #3d6b5a;
+  --red: #a34b3b;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; background: #e8e4dc;
+  font-family: 'Noto Sans JP', -apple-system, system-ui, sans-serif;
+  color: var(--ink); -webkit-font-smoothing: antialiased; letter-spacing: 0.01em;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace; letter-spacing: 0; }
+.serif { font-family: 'Noto Serif JP', 'Noto Serif', serif; }
+.stage {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 24px; gap: 48px;
+}
+.stage-bg {
+  position: fixed; inset: 0;
+  background: radial-gradient(1200px 600px at 20% 10%, rgba(59,91,165,0.06), transparent 60%),
+              radial-gradient(900px 500px at 80% 90%, rgba(163,75,59,0.05), transparent 60%), #e8e4dc;
+  z-index: -1;
+}
+.screen {
+  width: 100%; height: 100%; background: var(--bg);
+  overflow: hidden; position: relative; display: flex; flex-direction: column;
+}
+.btn {
+  border: none; background: var(--ink); color: white;
+  padding: 14px 20px; border-radius: 14px; font-size: 15px; font-weight: 600;
+  cursor: pointer; font-family: inherit; letter-spacing: 0.02em;
+}
+.btn:active { transform: scale(0.98); }
+.btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn-pill { border-radius: 999px; padding: 10px 16px; font-size: 13px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px; background: var(--card);
+  border: 1px solid var(--line); font-size: 12px; color: var(--ink-2); white-space: nowrap;
+}
+.chip.active { background: var(--ink); color: white; border-color: var(--ink); }
+.card { background: var(--card); border-radius: 20px; border: 1px solid var(--line); }
+.screen *::-webkit-scrollbar { width: 0; display: none; }
+.placeholder-img {
+  background: repeating-linear-gradient(135deg, #efede8 0 8px, #e8e4dc 8px 16px);
+  position: relative;
+}
+.placeholder-img::after {
+  content: attr(data-label); position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: rgba(0,0,0,0.38); letter-spacing: 0.05em;
+}
+.fade-in { animation: fadeIn 0.35s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.slide-in-right { animation: slideRight 0.3s cubic-bezier(0.22, 0.8, 0.36, 1); }
+@keyframes slideRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+.shimmer {
+  background: linear-gradient(90deg, #f0ede7 25%, #f7f5f0 50%, #f0ede7 75%);
+  background-size: 200% 100%; animation: shimmer 1.8s infinite;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.time-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink); flex-shrink: 0; }
+.route-path { stroke-dasharray: 6 4; animation: dash 30s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -200; } }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+</head>
+<body>
+<div class="stage-bg"></div>
+<div id="root"></div>
+
+<!-- Data -->
+<script>
+// Mock data for Ishikawa 3-night trip
+window.TRIP_DATA = {
+  destination: '石川（金沢・能登）', nights: 3, dates: '2026.05.02 - 2026.05.05', people: 2,
+  spots: [
+    { id: 's1', name: '兼六園', cat: '庭園' },
+    { id: 's2', name: '金沢21世紀美術館', cat: '美術館' },
+    { id: 's3', name: 'ひがし茶屋街', cat: '街歩き' },
+    { id: 's4', name: '近江町市場', cat: '食' },
+    { id: 's5', name: '千里浜なぎさドライブウェイ', cat: '絶景' },
+    { id: 's6', name: '輪島朝市', cat: '食' },
+    { id: 's7', name: '白米千枚田', cat: '絶景' },
+    { id: 's8', name: '妙立寺（忍者寺）', cat: '寺社' },
+  ],
+};
+
+window.PLANS = [
+  {
+    id: 'p1', title: '王道ハイライト', tagline: '迷ったらこれ。定番を無駄なく。', vibe: 'balanced',
+    meta: { walk: '8.2km', cost: '¥38,400', spots: 9, rating: 4.6 },
+    color: '#1a1a1a', accent: '#3B5BA5',
+    highlights: ['兼六園', '21世紀美術館', 'ひがし茶屋街'],
+    days: [
+      { label: 'Day 1', date: '05.02 (土)', sub: '到着〜金沢市内', items: [
+        { t: '10:20', type: 'move', title: '小松空港 着', dur: 10, mode: '徒歩' },
+        { t: '10:30', type: 'move', title: '空港バス → 金沢駅', dur: 40, mode: 'バス' },
+        { t: '11:30', type: 'stay', title: '近江町市場でランチ', dur: 75, note: '海鮮丼。行列は11時台が狙い目', spot: 's4' },
+        { t: '13:00', type: 'move', title: '徒歩', dur: 15, mode: '徒歩' },
+        { t: '13:15', type: 'stay', title: '兼六園', dur: 90, note: '日本三名園。新緑の時期', spot: 's1' },
+        { t: '14:45', type: 'move', title: '徒歩', dur: 5, mode: '徒歩' },
+        { t: '14:50', type: 'stay', title: '金沢21世紀美術館', dur: 120, note: 'レアンドロのプール必見', spot: 's2' },
+        { t: '17:10', type: 'move', title: 'タクシー', dur: 10, mode: 'タクシー' },
+        { t: '17:20', type: 'stay', title: 'ホテル チェックイン', dur: 40 },
+        { t: '19:00', type: 'stay', title: '夕食: 居酒屋いたる', dur: 120, note: '予約推奨。治部煮がおすすめ' },
+      ]},
+      { label: 'Day 2', date: '05.03 (日)', sub: '金沢を歩く', items: [
+        { t: '09:00', type: 'stay', title: 'ひがし茶屋街', dur: 90, note: '朝は観光客が少ない', spot: 's3' },
+        { t: '10:30', type: 'move', title: '徒歩', dur: 20, mode: '徒歩' },
+        { t: '10:50', type: 'stay', title: '主計町茶屋街 + 金沢城', dur: 100 },
+        { t: '12:30', type: 'stay', title: 'ランチ: 寿司 (乙女寿司)', dur: 90 },
+        { t: '14:00', type: 'move', title: 'タクシー', dur: 10, mode: 'タクシー' },
+        { t: '14:10', type: 'stay', title: '妙立寺（忍者寺）', dur: 60, note: '要予約', spot: 's8' },
+        { t: '15:10', type: 'stay', title: '長町武家屋敷跡', dur: 70 },
+        { t: '16:30', type: 'stay', title: 'カフェ休憩', dur: 60 },
+        { t: '19:00', type: 'stay', title: '夕食: おでん三幸', dur: 120 },
+      ]},
+      { label: 'Day 3', date: '05.04 (月)', sub: '能登へドライブ', items: [
+        { t: '09:00', type: 'move', title: 'レンタカー出発', dur: 60, mode: '車' },
+        { t: '10:00', type: 'stay', title: '千里浜なぎさドライブウェイ', dur: 60, note: '波打ち際を走れる', spot: 's5' },
+        { t: '11:00', type: 'move', title: '車', dur: 90, mode: '車' },
+        { t: '12:30', type: 'stay', title: 'ランチ: 輪島の海鮮', dur: 80 },
+        { t: '13:50', type: 'stay', title: '白米千枚田', dur: 70, note: '展望台から', spot: 's7' },
+        { t: '15:00', type: 'move', title: '車', dur: 30, mode: '車' },
+        { t: '15:30', type: 'stay', title: '輪島塗会館', dur: 60 },
+        { t: '16:30', type: 'stay', title: '能登の宿チェックイン', dur: 60 },
+        { t: '18:30', type: 'stay', title: '夕食: 宿で会席', dur: 120 },
+      ]},
+      { label: 'Day 4', date: '05.05 (火)', sub: '能登〜帰路', items: [
+        { t: '07:30', type: 'stay', title: '輪島朝市', dur: 90, note: '200年続く朝市', spot: 's6' },
+        { t: '09:00', type: 'move', title: '車', dur: 30, mode: '車' },
+        { t: '09:30', type: 'stay', title: '禄剛崎灯台', dur: 60 },
+        { t: '10:30', type: 'move', title: '車で金沢へ', dur: 150, mode: '車' },
+        { t: '13:00', type: 'stay', title: 'ランチ + お土産', dur: 90 },
+        { t: '14:30', type: 'move', title: 'レンタカー返却', dur: 20, mode: '車' },
+        { t: '15:30', type: 'move', title: '空港バス', dur: 40, mode: 'バス' },
+        { t: '17:00', type: 'stay', title: '小松空港 発', dur: 0 },
+      ]},
+    ],
+  },
+  {
+    id: 'p2', title: 'グルメ重点', tagline: '朝市から小料理屋まで、食で巡る石川。', vibe: 'gourmet',
+    meta: { walk: '6.1km', cost: '¥52,800', spots: 11, rating: 4.8 },
+    color: '#1a1a1a', accent: '#A34B3B',
+    highlights: ['近江町市場', '輪島朝市', '寿司・治部煮・海鮮丼'],
+    days: [
+      { label: 'Day 1', date: '05.02 (土)', sub: '金沢市場三昧', items: [
+        { t: '10:20', type: 'move', title: '小松空港 着', dur: 10, mode: '徒歩' },
+        { t: '10:30', type: 'move', title: '空港バス', dur: 40, mode: 'バス' },
+        { t: '11:20', type: 'stay', title: '近江町市場 食べ歩き', dur: 120, note: 'のどぐろ串、牡蠣、和菓子', spot: 's4' },
+        { t: '13:20', type: 'stay', title: 'ホテル荷物預け', dur: 30 },
+        { t: '14:00', type: 'stay', title: '兼六園 + 茶屋で上生菓子', dur: 120, spot: 's1' },
+        { t: '16:30', type: 'stay', title: 'カフェ: 茶菓工房たろう', dur: 60 },
+        { t: '19:30', type: 'stay', title: '夕食: 片町の小料理屋', dur: 150, note: '地酒と治部煮' },
+      ]},
+      { label: 'Day 2', date: '05.03 (日)', sub: '寿司と茶屋街', items: [
+        { t: '09:30', type: 'stay', title: 'ひがし茶屋街 朝散歩', dur: 60, spot: 's3' },
+        { t: '11:30', type: 'stay', title: 'ランチ: 乙女寿司（要予約）', dur: 120 },
+        { t: '13:30', type: 'stay', title: '長町武家屋敷', dur: 60 },
+        { t: '14:30', type: 'stay', title: 'カフェ: 久連波（九谷焼で抹茶）', dur: 60 },
+        { t: '16:00', type: 'stay', title: '近江町でお土産', dur: 60 },
+        { t: '19:00', type: 'stay', title: '夕食: 割烹 加賀', dur: 150, note: '加賀料理フルコース' },
+      ]},
+      { label: 'Day 3', date: '05.04 (月)', sub: '能登海鮮', items: [
+        { t: '09:00', type: 'move', title: 'レンタカー', dur: 60, mode: '車' },
+        { t: '10:00', type: 'stay', title: '千里浜ドライブウェイ', dur: 45, spot: 's5' },
+        { t: '11:00', type: 'move', title: '車', dur: 90, mode: '車' },
+        { t: '12:30', type: 'stay', title: 'ランチ: 輪島 海鮮丼 大助', dur: 90 },
+        { t: '14:00', type: 'stay', title: '白米千枚田 + ソフトクリーム', dur: 60, spot: 's7' },
+        { t: '15:30', type: 'stay', title: '塩田体験 + 揚げ浜塩買い', dur: 75 },
+        { t: '17:00', type: 'stay', title: '宿チェックイン（能登）', dur: 60 },
+        { t: '18:30', type: 'stay', title: '夕食: 宿の海鮮会席', dur: 150 },
+      ]},
+      { label: 'Day 4', date: '05.05 (火)', sub: '朝市フィナーレ', items: [
+        { t: '07:00', type: 'stay', title: '輪島朝市 たっぷり', dur: 120, note: '干物、海女さんの貝', spot: 's6' },
+        { t: '09:30', type: 'stay', title: '朝市横で海鮮朝食', dur: 60 },
+        { t: '11:00', type: 'move', title: '車で金沢', dur: 150, mode: '車' },
+        { t: '13:30', type: 'stay', title: 'ランチ: 金沢カレー名店', dur: 60 },
+        { t: '14:30', type: 'move', title: '返却 + バス', dur: 60, mode: 'バス' },
+        { t: '17:00', type: 'stay', title: '小松空港 発', dur: 0 },
+      ]},
+    ],
+  },
+  {
+    id: 'p3', title: '静かな絶景', tagline: '人混みを避け、海と里山へ。', vibe: 'quiet',
+    meta: { walk: '4.5km', cost: '¥44,200', spots: 8, rating: 4.5 },
+    color: '#1a1a1a', accent: '#3D6B5A',
+    highlights: ['千枚田', '千里浜', '珠洲の海'],
+    days: [
+      { label: 'Day 1', date: '05.02 (土)', sub: 'ゆっくり到着', items: [
+        { t: '10:20', type: 'move', title: '小松空港 着', dur: 10 },
+        { t: '10:40', type: 'move', title: 'レンタカー', dur: 30, mode: '車' },
+        { t: '11:30', type: 'stay', title: '那谷寺（静寂の古刹）', dur: 90 },
+        { t: '13:30', type: 'stay', title: 'ランチ: 山中温泉の蕎麦', dur: 75 },
+        { t: '15:00', type: 'stay', title: '山中温泉 こおろぎ橋 散歩', dur: 60 },
+        { t: '16:30', type: 'stay', title: '温泉宿チェックイン', dur: 45 },
+        { t: '18:00', type: 'stay', title: '温泉 + 夕食（会席）', dur: 180 },
+      ]},
+      { label: 'Day 2', date: '05.03 (日)', sub: '里山を抜けて', items: [
+        { t: '09:00', type: 'move', title: '車', dur: 75, mode: '車' },
+        { t: '10:15', type: 'stay', title: '千里浜なぎさドライブウェイ', dur: 60, spot: 's5' },
+        { t: '11:30', type: 'move', title: '車', dur: 100, mode: '車' },
+        { t: '13:10', type: 'stay', title: 'ランチ: 羽咋の古民家カフェ', dur: 75 },
+        { t: '14:30', type: 'stay', title: '気多大社（静謐な神社）', dur: 60 },
+        { t: '16:00', type: 'move', title: '車', dur: 75, mode: '車' },
+        { t: '17:30', type: 'stay', title: '珠洲の民宿', dur: 60 },
+        { t: '19:00', type: 'stay', title: '夕食: 民宿の家庭料理', dur: 120 },
+      ]},
+      { label: 'Day 3', date: '05.04 (月)', sub: '奥能登の海', items: [
+        { t: '08:00', type: 'stay', title: '朝の散歩（海辺）', dur: 45 },
+        { t: '09:00', type: 'stay', title: '見附島（軍艦島）', dur: 60 },
+        { t: '10:30', type: 'move', title: '車', dur: 45, mode: '車' },
+        { t: '11:15', type: 'stay', title: '禄剛崎灯台', dur: 60 },
+        { t: '12:30', type: 'stay', title: 'ランチ: 能登の定食屋', dur: 75 },
+        { t: '14:00', type: 'stay', title: '白米千枚田', dur: 60, spot: 's7' },
+        { t: '15:15', type: 'stay', title: 'カフェ: 一本杉通り', dur: 75 },
+        { t: '17:00', type: 'stay', title: '輪島の宿', dur: 60 },
+        { t: '18:30', type: 'stay', title: '夕食', dur: 120 },
+      ]},
+      { label: 'Day 4', date: '05.05 (火)', sub: '静かに帰路', items: [
+        { t: '08:00', type: 'stay', title: '輪島朝市（ゆっくり）', dur: 60, spot: 's6' },
+        { t: '09:30', type: 'move', title: '車で金沢', dur: 150, mode: '車' },
+        { t: '12:00', type: 'stay', title: '兼六園（午後の光）', dur: 75, spot: 's1' },
+        { t: '13:30', type: 'stay', title: 'ランチ', dur: 60 },
+        { t: '14:30', type: 'move', title: 'バス', dur: 60, mode: 'バス' },
+        { t: '17:00', type: 'stay', title: '小松空港 発', dur: 0 },
+      ]},
+    ],
+  },
+];
+
+window.MAP_PINS = {
+  s1: { x: 0.52, y: 0.58, label: '兼六園' },
+  s2: { x: 0.53, y: 0.61, label: '21世紀美術館' },
+  s3: { x: 0.56, y: 0.51, label: 'ひがし茶屋街' },
+  s4: { x: 0.51, y: 0.54, label: '近江町市場' },
+  s5: { x: 0.38, y: 0.32, label: '千里浜' },
+  s6: { x: 0.62, y: 0.12, label: '輪島朝市' },
+  s7: { x: 0.66, y: 0.14, label: '白米千枚田' },
+  s8: { x: 0.50, y: 0.60, label: '妙立寺' },
+  hotel1: { x: 0.53, y: 0.58, label: '金沢の宿' },
+  hotel2: { x: 0.63, y: 0.15, label: '能登の宿' },
+  airport: { x: 0.30, y: 0.70, label: '小松空港' },
+};
+</script>
+
+<!-- All JSX inlined -->
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+// ─── iOS Frame ───────────────────────────────────────────
+function IOSStatusBar({ dark = false, time = '9:41' }) {
+  const c = dark ? '#fff' : '#000';
+  return (
+    <div style={{
+      display: 'flex', gap: 154, alignItems: 'center', justifyContent: 'center',
+      padding: '21px 24px 19px', boxSizing: 'border-box',
+      position: 'relative', zIndex: 20, width: '100%',
+    }}>
+      <div style={{ flex: 1, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 1.5 }}>
+        <span style={{ fontFamily: '-apple-system, "SF Pro", system-ui', fontWeight: 590, fontSize: 17, lineHeight: '22px', color: c }}>{time}</span>
+      </div>
+      <div style={{ flex: 1, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, paddingTop: 1, paddingRight: 1 }}>
+        <svg width="19" height="12" viewBox="0 0 19 12">
+          <rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/>
+          <rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/>
+          <rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/>
+          <rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/>
+        </svg>
+        <svg width="17" height="12" viewBox="0 0 17 12">
+          <path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/>
+          <path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/>
+          <circle cx="8.5" cy="10.5" r="1.5" fill={c}/>
+        </svg>
+        <svg width="27" height="13" viewBox="0 0 27 13">
+          <rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/>
+          <rect x="2" y="2" width="20" height="9" rx="2" fill={c}/>
+          <path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function IOSGlassPill({ children, dark = false, style = {} }) {
+  return (
+    <div style={{
+      height: 44, minWidth: 44, borderRadius: 9999, position: 'relative', overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: dark ? '0 2px 6px rgba(0,0,0,0.35), 0 6px 16px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.07), 0 3px 10px rgba(0,0,0,0.06)',
+      ...style,
+    }}>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: 9999, backdropFilter: 'blur(12px) saturate(180%)', WebkitBackdropFilter: 'blur(12px) saturate(180%)', background: dark ? 'rgba(120,120,128,0.28)' : 'rgba(255,255,255,0.5)' }}/>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: 9999, boxShadow: dark ? 'inset 1.5px 1.5px 1px rgba(255,255,255,0.15), inset -1px -1px 1px rgba(255,255,255,0.08)' : 'inset 1.5px 1.5px 1px rgba(255,255,255,0.7), inset -1px -1px 1px rgba(255,255,255,0.4)', border: dark ? '0.5px solid rgba(255,255,255,0.15)' : '0.5px solid rgba(0,0,0,0.06)' }}/>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', padding: '0 4px' }}>{children}</div>
+    </div>
+  );
+}
+
+function IOSDevice({ children, width = 402, height = 874, dark = false }) {
+  return (
+    <div style={{
+      width, height, borderRadius: 48, overflow: 'hidden', position: 'relative',
+      background: dark ? '#000' : '#F2F2F7',
+      boxShadow: '0 40px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.12)',
+      fontFamily: '-apple-system, system-ui, sans-serif', WebkitFontSmoothing: 'antialiased',
+    }}>
+      <div style={{ position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)', width: 126, height: 37, borderRadius: 24, background: '#000', zIndex: 50 }}/>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+        <IOSStatusBar dark={dark}/>
+      </div>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
+      </div>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 60, height: 34, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: 8, pointerEvents: 'none' }}>
+        <div style={{ width: 139, height: 5, borderRadius: 100, background: dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.25)' }}/>
+      </div>
+    </div>
+  );
+}
+
+// ─── Map View ────────────────────────────────────────────
+function MapView({ pins = [], route = [], highlight, dark = false, height = 280 }) {
+  const COASTLINE = "M 40 380 L 80 340 L 110 310 L 140 280 L 160 250 L 170 220 L 170 190 L 160 160 L 150 130 L 160 100 L 180 75 L 210 60 L 240 55 L 270 60 L 295 75 L 315 95 L 330 120 L 340 150 L 345 180 L 345 210 L 340 240 L 325 265 L 305 285 L 280 300 L 250 310 L 225 320 L 205 335 L 195 355 L 195 380 L 205 405 L 220 420 L 240 428 L 265 430 L 285 428 L 300 420 L 315 405 L 330 388 L 350 375 L 380 372 L 410 378 L 435 390 L 455 405 L 465 425 L 460 445 L 445 460 L 420 465 L 395 465 Z";
+  const RIVERS = ["M 180 260 Q 210 280 240 290 T 280 300", "M 260 340 Q 240 360 220 380"];
+  const toPx = (p) => ({ x: p.x * 500, y: p.y * 500 });
+  return (
+    <div style={{ width: '100%', height, position: 'relative', background: dark ? '#1a1d24' : '#eef2ec', overflow: 'hidden' }}>
+      <svg width="100%" height="100%" viewBox="0 0 500 500" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="4" stroke={dark ? '#252934' : '#e3e8e0'} strokeWidth="1"/>
+          </pattern>
+          <pattern id="sea" width="24" height="24" patternUnits="userSpaceOnUse">
+            <rect width="24" height="24" fill={dark ? '#0f1117' : '#dde6e8'}/>
+            <path d="M 0 12 Q 6 8 12 12 T 24 12" stroke={dark ? '#171b25' : '#d0dbdd'} strokeWidth="1" fill="none"/>
+          </pattern>
+        </defs>
+        <rect width="500" height="500" fill="url(#sea)"/>
+        <path d={COASTLINE} fill={dark ? '#20242d' : '#f3f0e8'} stroke={dark ? '#2b303c' : '#ddd8cc'} strokeWidth="1.2"/>
+        <path d="M 180 180 L 230 160 L 260 180 L 250 210 L 210 220 Z" fill="url(#hatch)" opacity="0.6"/>
+        <path d="M 230 110 L 270 95 L 300 115 L 290 145 L 250 150 Z" fill="url(#hatch)" opacity="0.5"/>
+        {RIVERS.map((d, i) => <path key={i} d={d} stroke={dark ? '#2c3e50' : '#c9d6dc'} strokeWidth="1.5" fill="none" opacity="0.7"/>)}
+        <path d="M 150 460 Q 220 400 260 340 T 280 200 T 290 80" stroke={dark ? '#3a3d48' : '#d8d2c2'} strokeWidth="1" fill="none" strokeDasharray="2 3"/>
+        <text x="120" y="440" fill={dark ? '#7a8298' : '#9a9485'} fontSize="10" fontFamily="Noto Sans JP">金沢市街</text>
+        <text x="280" y="90" fill={dark ? '#7a8298' : '#9a9485'} fontSize="10" fontFamily="Noto Sans JP">輪島</text>
+        <text x="70" y="250" fill={dark ? '#7a8298' : '#9a9485'} fontSize="10" fontFamily="Noto Sans JP">日本海</text>
+        {route.length > 1 && (
+          <polyline className="route-path" points={route.map(toPx).map(p => `${p.x},${p.y}`).join(' ')}
+            stroke={dark ? '#6b8cff' : '#3B5BA5'} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        )}
+        {pins.map((p, i) => {
+          const px = toPx(p);
+          const isHi = highlight === p.id || highlight === i;
+          return (
+            <g key={p.id || i} transform={`translate(${px.x},${px.y})`}>
+              {isHi && <circle r="18" fill={dark ? '#6b8cff' : '#3B5BA5'} opacity="0.15"><animate attributeName="r" values="14;22;14" dur="2s" repeatCount="indefinite"/></circle>}
+              <circle r={isHi ? 7 : 5} fill={dark ? '#6b8cff' : '#3B5BA5'} stroke="white" strokeWidth="1.8"/>
+              {p.n !== undefined && <text y="2" textAnchor="middle" fontSize="8" fontWeight="700" fill="white">{p.n}</text>}
+              {p.label && isHi && (
+                <g transform="translate(10,-6)">
+                  <rect x="0" y="-9" rx="3" width={p.label.length * 7 + 10} height="16" fill={dark ? '#1a1d24' : 'white'} stroke={dark ? '#2b303c' : '#d9d4c6'}/>
+                  <text x="5" y="2" fontSize="9" fill={dark ? 'white' : '#141414'} fontFamily="Noto Sans JP">{p.label}</text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ position: 'absolute', bottom: 4, right: 8, fontSize: 9, color: dark ? '#666' : '#aaa', fontFamily: 'JetBrains Mono, monospace' }}>© TripCraft · OpenMap-style</div>
+    </div>
+  );
+}
+
+// ─── Timeline ────────────────────────────────────────────
+function minToReadable(m) {
+  if (m < 60) return `${m}分`;
+  const h = Math.floor(m / 60); const rm = m % 60;
+  return rm ? `${h}h ${rm}m` : `${h}h`;
+}
+
+function ModeIcon({ mode, size = 12 }) {
+  const c = '#7a7a7a';
+  if (mode === '徒歩') return <svg width={size} height={size} viewBox="0 0 16 16"><circle cx="9" cy="2.5" r="1.5" fill={c}/><path d="M7 6 L5 10 L3 12 M8 6 L10 9 L12 12 M7 6 L8 10 L7 14" stroke={c} strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  if (mode === 'バス') return <svg width={size} height={size} viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="9" rx="1.5" fill="none" stroke={c} strokeWidth="1.2"/><rect x="3.5" y="4.5" width="9" height="3" fill={c} opacity="0.4"/><circle cx="5" cy="12.5" r="1" fill={c}/><circle cx="11" cy="12.5" r="1" fill={c}/></svg>;
+  if (mode === '車' || mode === 'タクシー') return <svg width={size} height={size} viewBox="0 0 16 16"><path d="M2 10 L3 6 L13 6 L14 10 L14 12 L2 12 Z" fill="none" stroke={c} strokeWidth="1.2"/><circle cx="4.5" cy="12" r="1" fill={c}/><circle cx="11.5" cy="12" r="1" fill={c}/></svg>;
+  return <span style={{ fontSize: 10, color: c }}>•</span>;
+}
+
+function TimelineDay({ day, onSpotTap, activeSpot }) {
+  return (
+    <div>
+      {day.items.map((it, i) => {
+        const isMove = it.type === 'move';
+        const isActive = activeSpot === it.spot;
+        return (
+          <div key={i} onClick={() => it.spot && onSpotTap?.(it.spot)} style={{ display: 'flex', gap: 12, padding: '10px 0', cursor: it.spot ? 'pointer' : 'default', position: 'relative' }}>
+            <div className="mono" style={{ width: 48, fontSize: 12, color: '#7a7a7a', paddingTop: 3, flexShrink: 0 }}>{it.t}</div>
+            <div style={{ position: 'relative', width: 14, flexShrink: 0 }}>
+              <div style={{ position: 'absolute', left: 6, top: 0, bottom: -20, width: 1, background: '#e8e4dc' }}/>
+              {isMove ? (
+                <div style={{ position: 'absolute', left: 2, top: 8, width: 8, height: 8, borderRadius: '50%', background: 'white', border: '1.5px solid #c8c4bc' }}/>
+              ) : (
+                <div style={{ position: 'absolute', left: 1, top: 6, width: 11, height: 11, borderRadius: '50%', background: isActive ? '#3B5BA5' : '#141414', boxShadow: isActive ? '0 0 0 3px rgba(59,91,165,0.2)' : 'none', transition: 'all 0.2s' }}/>
+              )}
+            </div>
+            <div style={{ flex: 1, paddingBottom: 6, borderRadius: 10, background: isActive ? '#f1f3f8' : 'transparent', padding: isActive ? '6px 10px' : '0', margin: isActive ? '-6px -10px 0' : '0', transition: 'all 0.2s' }}>
+              <div style={{ fontSize: 14, fontWeight: isMove ? 400 : 600, color: isMove ? '#7a7a7a' : '#141414', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {isMove && <ModeIcon mode={it.mode} size={12}/>}
+                <span>{it.title}</span>
+                {isMove && it.dur > 0 && <span className="mono" style={{ fontSize: 11, color: '#a5a5a5' }}>· {minToReadable(it.dur)}</span>}
+              </div>
+              {it.note && <div style={{ fontSize: 12, color: '#7a7a7a', marginTop: 4, lineHeight: 1.5 }}>{it.note}</div>}
+              {!isMove && it.dur > 0 && <div className="mono" style={{ fontSize: 11, color: '#a5a5a5', marginTop: 4 }}>滞在 {minToReadable(it.dur)}</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Home Screen ─────────────────────────────────────────
+function HomeScreen({ onGenerate, state, setState }) {
+  const [spotInput, setSpotInput] = useState('');
+  const addSpot = (name) => {
+    if (!name.trim()) return;
+    if (state.spots.find(s => s.name === name)) return;
+    setState({ ...state, spots: [...state.spots, { id: 'c' + Date.now(), name, cat: '選択中' }] });
+    setSpotInput('');
+  };
+  const removeSpot = (id) => setState({ ...state, spots: state.spots.filter(s => s.id !== id) });
+  const suggestions = ['兼六園', '金沢21世紀美術館', 'ひがし茶屋街', '近江町市場', '千里浜', '輪島朝市', '白米千枚田', '妙立寺'];
+
+  return (
+    <div className="screen fade-in" style={{ background: '#faf8f4' }}>
+      <div style={{ padding: '56px 20px 14px' }}>
+        <div className="mono" style={{ fontSize: 11, color: '#a5a5a5', letterSpacing: '0.1em' }}>TRIPCRAFT</div>
+        <div className="serif" style={{ fontSize: 30, fontWeight: 500, marginTop: 6, lineHeight: 1.2 }}>あなたの旅を、<br/>AIがデザインする。</div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 120px' }}>
+        <div className="card" style={{ padding: 16, marginTop: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 11, color: '#a5a5a5' }}>行き先</div>
+              <div style={{ fontSize: 18, fontWeight: 600, marginTop: 2 }}>{state.destination || '石川'}</div>
+            </div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#a5a5a5" strokeWidth="2" strokeLinecap="round"/></svg>
+          </div>
+          <div style={{ height: 1, background: '#efede8', margin: '14px 0' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 11, color: '#a5a5a5' }}>期間</div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginTop: 2 }}>{state.nights}泊{state.nights + 1}日 · 5/2〜5/5</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, color: '#a5a5a5' }}>人数</div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginTop: 2 }}>{state.people}人</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 28, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#141414' }}>行きたいスポット</div>
+          <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3 }}>ざっくりでOK。AIが順番と時間を最適化します</div>
+        </div>
+
+        {state.spots.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+            {state.spots.map(s => {
+              const setDay = (d) => setState({ ...state, spots: state.spots.map(x => x.id === s.id ? { ...x, day: d } : x) });
+              const totalDays = (state.nights || 3) + 1;
+              const curDay = s.day ?? null;
+              return (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', borderRadius: 10, border: '1px solid #e8e4dc', padding: '8px 10px 8px 12px' }}>
+                  <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{s.name}</div>
+                  <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 8, background: '#f5f2ec' }}>
+                    <button onClick={() => setDay(null)} style={{ border: 'none', background: curDay === null ? '#141414' : 'transparent', color: curDay === null ? 'white' : '#7a7a7a', fontSize: 10, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>おまかせ</button>
+                    {Array.from({ length: totalDays }).map((_, i) => {
+                      const d = i + 1; const on = curDay === d;
+                      return <button key={d} onClick={() => setDay(d)} style={{ border: 'none', background: on ? '#141414' : 'transparent', color: on ? 'white' : '#7a7a7a', fontSize: 10, padding: '4px 7px', borderRadius: 6, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, minWidth: 22 }}>D{d}</button>;
+                    })}
+                  </div>
+                  <button onClick={() => removeSpot(s.id)} style={{ border: 'none', background: '#f5f2ec', color: '#7a7a7a', width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, background: 'white', borderRadius: 12, border: '1px solid #e8e4dc', padding: '4px 4px 4px 14px', alignItems: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#a5a5a5" strokeWidth="2"/><path d="M16 16l4 4" stroke="#a5a5a5" strokeWidth="2" strokeLinecap="round"/></svg>
+          <input value={spotInput} onChange={e => setSpotInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSpot(spotInput)} placeholder="スポット名を入力..." style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 6px', fontSize: 14, fontFamily: 'inherit', background: 'transparent' }}/>
+          <button onClick={() => addSpot(spotInput)} style={{ border: 'none', background: '#141414', color: 'white', width: 34, height: 34, borderRadius: 8, cursor: 'pointer', fontSize: 16, fontWeight: 500 }}>+</button>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', marginBottom: 8, letterSpacing: '0.08em' }}>人気のスポット</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {suggestions.filter(n => !state.spots.find(s => s.name === n)).map(name => (
+              <button key={name} onClick={() => addSpot(name)} className="chip" style={{ cursor: 'pointer', fontFamily: 'inherit' }}>+ {name}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>宿泊</div>
+          <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3, marginBottom: 10 }}>予約済みの場合は入力。未定ならAIがホテルも提案します</div>
+          <div style={{ display: 'flex', gap: 4, padding: 3, background: '#f1ede4', borderRadius: 10, marginBottom: 10 }}>
+            {[{ id: 'booked', label: '予約済み' }, { id: 'tbd', label: '未定（AIに提案してもらう）' }].map(opt => {
+              const on = (state.hotelMode || 'booked') === opt.id;
+              return <button key={opt.id} onClick={() => setState({ ...state, hotelMode: opt.id })} style={{ flex: 1, border: 'none', background: on ? 'white' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', padding: '8px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: on ? 600 : 400, color: on ? '#141414' : '#7a7a7a' }}>{opt.label}</button>;
+            })}
+          </div>
+          {(state.hotelMode || 'booked') === 'booked' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[0, 1, 2].map(i => {
+                const hotels = state.hotels || [];
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'white', borderRadius: 10, border: '1px solid #e8e4dc', padding: '8px 12px' }}>
+                    <div style={{ width: 30, flexShrink: 0, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: '#a5a5a5' }}>N{i + 1}</div>
+                    <input value={hotels[i] || ''} onChange={e => { const next = [...hotels]; next[i] = e.target.value; setState({ ...state, hotels: next }); }} placeholder={i === 0 ? '例: 金沢白鳥路ホテル' : i === 1 ? '2泊目のホテル' : '3泊目のホテル'} style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 2px', fontSize: 13, fontFamily: 'inherit', background: 'transparent' }}/>
+                    {(hotels[i] || '').trim() && <div style={{ fontSize: 10, color: '#3d6b5a', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }}>✓</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ background: 'white', borderRadius: 10, border: '1px dashed #c8c4bc', padding: '14px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #3B5BA5, #141414)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="white"/></svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>AIがホテルも含めて提案</div>
+                <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 4, lineHeight: 1.5 }}>各プランに合わせた3泊分の宿泊先を候補付きで提示します。後から変更可。</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 20px 38px', background: 'linear-gradient(to top, #faf8f4 70%, rgba(250,248,244,0))' }}>
+        <button onClick={onGenerate} disabled={state.spots.length === 0} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', cursor: state.spots.length ? 'pointer' : 'not-allowed', background: state.spots.length ? '#141414' : '#d5d1c8', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'inherit', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="white"/></svg>
+          3つのプランを生成する
+        </button>
+        <div style={{ textAlign: 'center', fontSize: 10, color: '#a5a5a5', marginTop: 8 }} className="mono">Powered by Gemini</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Loading Screen ───────────────────────────────────────
+function LoadingScreen({ onDone }) {
+  const [step, setStep] = useState(0);
+  const messages = ['スポット情報を収集中...', '行き先に合う旅のスタイルを検討中...', '移動経路と滞在時間を最適化中...', '3つの切り口でプランを作成中...', '宿泊・食事の候補を精選中...', '最終チェック...'];
+  useEffect(() => {
+    const t = setInterval(() => {
+      setStep(s => {
+        if (s >= messages.length - 1) { clearInterval(t); setTimeout(onDone, 600); return s; }
+        return s + 1;
+      });
+    }, 550);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="screen" style={{ background: '#faf8f4', alignItems: 'center', justifyContent: 'center', padding: '40px 30px' }}>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div style={{ width: 120, height: 120, margin: '0 auto 32px', position: 'relative' }}>
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            <defs>
+              <radialGradient id="orb" cx="40%" cy="40%">
+                <stop offset="0%" stopColor="#3B5BA5" stopOpacity="0.9"/>
+                <stop offset="60%" stopColor="#2b3a67" stopOpacity="0.6"/>
+                <stop offset="100%" stopColor="#141414" stopOpacity="0.1"/>
+              </radialGradient>
+            </defs>
+            <circle cx="60" cy="60" r="54" fill="none" stroke="#e8e4dc" strokeWidth="1"/>
+            <circle cx="60" cy="60" r="44" fill="none" stroke="#e8e4dc" strokeWidth="1" strokeDasharray="4 6">
+              <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="10s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="60" cy="60" r="30" fill="url(#orb)">
+              <animate attributeName="r" values="28;34;28" dur="2.5s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="60" cy="60" r="8" fill="white" opacity="0.8">
+              <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.5s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        </div>
+        <div className="serif" style={{ fontSize: 22, fontWeight: 500, marginBottom: 8 }}>あなた専用のプランを<br/>設計しています</div>
+        <div className="mono" style={{ fontSize: 11, color: '#7a7a7a', marginBottom: 36, letterSpacing: '0.05em' }}>GEMINI · 推論中</div>
+        <div style={{ textAlign: 'left' }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', opacity: i <= step ? 1 : 0.35, transition: 'opacity 0.3s' }}>
+              <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${i < step ? '#3B5BA5' : i === step ? '#3B5BA5' : '#d5d1c8'}`, background: i < step ? '#3B5BA5' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {i < step && <svg width="7" height="5" viewBox="0 0 7 5"><path d="M1 2.5l2 2 3-4" stroke="white" strokeWidth="1.5" fill="none"/></svg>}
+                {i === step && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B5BA5', animation: 'pulse 1s ease-in-out infinite' }}/>}
+              </div>
+              <div style={{ fontSize: 13 }}>{m}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+    </div>
+  );
+}
+
+// ─── Detail Screen ────────────────────────────────────────
+function DetailScreen({ plan, onBack, onShare, onAIChat, onPlanChange }) {
+  const [activeDay, setActiveDay] = useState(0);
+  const [activeSpot, setActiveSpot] = useState(null);
+  const [viewMode, setViewMode] = useState('timeline');
+  const day = plan.days[activeDay];
+
+  const pinsForDay = useMemo(() => {
+    return day.items.filter(it => it.spot && MAP_PINS[it.spot]).map((it, i) => ({ id: it.spot, ...MAP_PINS[it.spot], n: i + 1 }));
+  }, [activeDay, plan.id]);
+
+  const routeForDay = pinsForDay.map(p => ({ x: p.x, y: p.y }));
+
+  return (
+    <div className="screen fade-in">
+      <div style={{ padding: '52px 16px 14px', background: plan.accent, color: 'white' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={onBack} style={{ border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
+          </button>
+          <div className="mono" style={{ fontSize: 10, opacity: 0.8, letterSpacing: '0.08em' }}>石川 · 3泊4日 · AIが3案ご提案</div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 14, overflowX: 'auto', paddingBottom: 2 }}>
+          {PLANS.map(p => {
+            const on = p.id === plan.id;
+            return (
+              <button key={p.id} onClick={() => onPlanChange?.(p)} style={{ flex: '0 0 auto', border: 'none', cursor: 'pointer', padding: '8px 14px', borderRadius: 999, background: on ? 'white' : 'rgba(255,255,255,0.15)', color: on ? '#141414' : 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', backdropFilter: on ? 'none' : 'blur(10px)', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: on ? p.accent : 'rgba(255,255,255,0.7)' }}/>
+                {p.title}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <div className="serif" style={{ fontSize: 24, fontWeight: 500, lineHeight: 1.2 }}>{plan.title}</div>
+          <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{plan.tagline}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 20, marginTop: 16, fontSize: 11 }}>
+          <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{plan.meta.spots}</div><div style={{ opacity: 0.7, marginTop: 1 }}>スポット</div></div>
+          <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{plan.meta.cost}</div><div style={{ opacity: 0.7, marginTop: 1 }}>概算/人</div></div>
+          <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{plan.meta.walk}</div><div style={{ opacity: 0.7, marginTop: 1 }}>歩行</div></div>
+          <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>★{plan.meta.rating}</div><div style={{ opacity: 0.7, marginTop: 1 }}>AI評価</div></div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', padding: '0 16px', background: 'white', borderBottom: '1px solid #efede8', overflowX: 'auto' }}>
+        {plan.days.map((d, i) => (
+          <button key={i} onClick={() => setActiveDay(i)} style={{ flex: '0 0 auto', border: 'none', background: 'transparent', padding: '14px 14px 12px', cursor: 'pointer', borderBottom: `2px solid ${activeDay === i ? plan.accent : 'transparent'}`, fontFamily: 'inherit', color: activeDay === i ? '#141414' : '#7a7a7a', fontWeight: activeDay === i ? 600 : 400, fontSize: 13 }}>
+            {d.label} <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>{d.date.slice(0, 5)}</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 4, padding: '10px 16px 6px', background: '#faf8f4' }}>
+        <button onClick={() => setViewMode('timeline')} style={{ border: 'none', background: viewMode === 'timeline' ? 'white' : 'transparent', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', boxShadow: viewMode === 'timeline' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: viewMode === 'timeline' ? 600 : 400 }}>⏱ タイムライン</button>
+        <button onClick={() => setViewMode('map')} style={{ border: 'none', background: viewMode === 'map' ? 'white' : 'transparent', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', boxShadow: viewMode === 'map' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: viewMode === 'map' ? 600 : 400 }}>🗺 地図</button>
+        <div style={{ flex: 1 }}/>
+        <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', alignSelf: 'center' }}>{day.sub}</div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 20px 120px', background: '#faf8f4' }}>
+        {viewMode === 'map' ? (
+          <>
+            <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e8e4dc', marginBottom: 14 }}>
+              <MapView pins={pinsForDay} route={routeForDay} highlight={activeSpot} height={280}/>
+            </div>
+            <div style={{ fontSize: 12, color: '#7a7a7a', marginBottom: 10 }}>{day.label} の順路（{pinsForDay.length}スポット）</div>
+            {pinsForDay.map((p, i) => (
+              <div key={p.id} onClick={() => setActiveSpot(p.id)} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', background: 'white', borderRadius: 10, marginBottom: 6, border: activeSpot === p.id ? `1.5px solid ${plan.accent}` : '1px solid #efede8', cursor: 'pointer' }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: plan.accent, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{i + 1}</div>
+                <div style={{ fontSize: 13, flex: 1 }}>{p.label}</div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#a5a5a5" strokeWidth="2" strokeLinecap="round"/></svg>
+              </div>
+            ))}
+          </>
+        ) : (
+          <TimelineDay day={day} activeSpot={activeSpot} onSpotTap={id => setActiveSpot(id === activeSpot ? null : id)}/>
+        )}
+      </div>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 38px', background: 'white', borderTop: '1px solid #efede8', display: 'flex', gap: 8 }}>
+        <button onClick={onAIChat} style={{ border: '1px solid #e8e4dc', background: 'white', padding: '13px 16px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 13 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="#3B5BA5"/></svg>
+          調整
+        </button>
+        <button onClick={onShare} style={{ flex: 1, border: 'none', background: '#141414', color: 'white', padding: '13px 16px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          このプランに決めて共有
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AI Chat ─────────────────────────────────────────────
+function AIChat({ onClose, plan, onApply }) {
+  const [messages, setMessages] = useState([{ role: 'ai', text: `${plan ? plan.title : 'プラン'}について、どう調整しますか？気軽にお伝えください。` }]);
+  const [input, setInput] = useState('');
+  const [thinking, setThinking] = useState(false);
+  const bottomRef = useRef();
+
+  useEffect(() => { bottomRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }); }, [messages, thinking]);
+
+  const GEMINI_API_KEY = 'AIzaSyCd6hixMPTagnB3_INrpQ0dsXqb6xJqkeE';
+  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+  const callGemini = async (userText) => {
+    const systemPrompt = `あなたは旅行プランナーAIアシスタントです。
+現在のプラン「${plan.title}」（${plan.tagline}）について、ユーザーの要望に日本語で簡潔に答えてください。
+プランの調整内容を具体的に説明し、変更点のタイトルも提案してください。
+
+以下のJSON形式のみで返答してください（説明文や\`\`\`は不要）:
+{"message":"回答テキスト（2〜4文）","change":"変更タイトル（10文字以内）"}`;
+
+    const res = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${systemPrompt}\n\nユーザーの要望: ${userText}` }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+      }),
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    const data = await res.json();
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    try {
+      const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(clean);
+    } catch {
+      return { message: raw, change: 'AI調整' };
+    }
+  };
+
+  const send = async (text) => {
+    if (!text.trim()) return;
+    setMessages(m => [...m, { role: 'user', text }]);
+    setInput('');
+    setThinking(true);
+    try {
+      const reply = await callGemini(text);
+      setMessages(m => [...m, { role: 'ai', text: reply.message, change: reply.change || null }]);
+    } catch (e) {
+      setMessages(m => [...m, { role: 'ai', text: `エラーが発生しました: ${e.message}` }]);
+    } finally {
+      setThinking(false);
+    }
+  };
+
+  const suggestions = ['雨の日版に変えて', '早朝メインで', 'もう少し温泉を入れて', '予算を抑えたい'];
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,20,0.3)', zIndex: 100, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', animation: 'fadeIn 0.2s' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '24px 24px 0 0', height: '82%', display: 'flex', flexDirection: 'column', animation: 'slideUp 0.3s cubic-bezier(0.22,0.8,0.36,1)', overflow: 'hidden' }}>
+        <div style={{ padding: '10px 0 0', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e8e4dc' }}/>
+        </div>
+        <div style={{ padding: '10px 20px 12px', borderBottom: '1px solid #efede8' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%, #3B5BA5, #141414)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="white"/></svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>AIアシスタント</div>
+              <div className="mono" style={{ fontSize: 10, color: '#7a7a7a', marginTop: 1 }}>GEMINI · プランを会話で調整</div>
+            </div>
+            <button onClick={onClose} style={{ border: 'none', background: '#f5f2ec', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 14, color: '#7a7a7a' }}>✕</button>
+          </div>
+        </div>
+        <div ref={bottomRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 10 }}>
+              <div style={{ maxWidth: '82%', padding: '10px 14px', borderRadius: 14, background: m.role === 'user' ? '#141414' : '#f5f2ec', color: m.role === 'user' ? 'white' : '#141414', fontSize: 13, lineHeight: 1.55 }}>
+                {m.text}
+                {m.change && (
+                  <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'white', border: '1px solid #e8e4dc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3B5BA5', flexShrink: 0 }}/>
+                    <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: '#141414' }}>{m.change}</div>
+                    <button onClick={() => onApply?.(m.change)} style={{ border: 'none', background: '#141414', color: 'white', padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>適用</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {thinking && (
+            <div style={{ display: 'flex', gap: 4, padding: '10px 14px' }}>
+              {[0, 0.2, 0.4].map((delay, i) => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#a5a5a5', animation: `bounce 1s ${delay}s infinite` }}/>)}
+            </div>
+          )}
+        </div>
+        {messages.length < 2 && (
+          <div style={{ padding: '0 20px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {suggestions.map(s => <button key={s} onClick={() => send(s)} className="chip" style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{s}</button>)}
+          </div>
+        )}
+        <div style={{ padding: '12px 16px 24px', borderTop: '1px solid #efede8', display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, background: '#f5f2ec', borderRadius: 20, padding: '4px 4px 4px 14px', display: 'flex', alignItems: 'center' }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send(input)} placeholder="プランに要望を..." style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '8px 4px', fontSize: 13, fontFamily: 'inherit' }}/>
+            <button onClick={() => send(input)} style={{ border: 'none', background: input.trim() ? '#141414' : '#d5d1c8', color: 'white', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12l14 0M13 6l6 6-6 6" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } @keyframes bounce { 0%, 80%, 100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-4px); } }`}</style>
+    </div>
+  );
+}
+
+// ─── Share Screen ─────────────────────────────────────────
+function ShareScreen({ plan, onBack, onDone }) {
+  const [selected, setSelected] = useState([]);
+  const [sent, setSent] = useState(false);
+  const [message, setMessage] = useState(`${plan.title}で石川旅行どう？\n5/2〜5/5の3泊4日、AI設計プラン。`);
+  const contacts = [
+    { id: 'c1', name: '田中 ゆい', sub: '昨日' },
+    { id: 'c2', name: '佐藤 けんた', sub: '2日前' },
+    { id: 'c3', name: '旅行グループ（4）', sub: '先週', group: true },
+    { id: 'c4', name: 'みさき', sub: '先週' },
+    { id: 'c5', name: '母', sub: '2週間前' },
+  ];
+  const toggle = (id) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const colors = ['#B6876A', '#3D6B5A', '#A34B3B', '#3B5BA5', '#7a7a7a'];
+
+  if (sent) return (
+    <div className="screen fade-in" style={{ background: '#faf8f4', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ textAlign: 'center', padding: 30 }}>
+        <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#141414', margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+        <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>送信しました</div>
+        <div style={{ fontSize: 13, color: '#7a7a7a', marginTop: 8 }}>{selected.length}件のLINEトークに共有</div>
+        <button onClick={onDone} style={{ marginTop: 28, padding: '12px 24px', border: '1px solid #141414', background: 'white', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>プランに戻る</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="screen fade-in" style={{ background: 'white' }}>
+      <div style={{ padding: '52px 16px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #efede8' }}>
+        <button onClick={onBack} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#141414" strokeWidth="2.2" strokeLinecap="round"/></svg>
+        </button>
+        <div>
+          <div className="serif" style={{ fontSize: 18, fontWeight: 500 }}>LINEで共有</div>
+          <div style={{ fontSize: 11, color: '#7a7a7a' }}>相手を選んで送信</div>
+        </div>
+      </div>
+      <div style={{ padding: '16px 16px 8px' }}>
+        <div style={{ border: '1px solid #e8e4dc', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ height: 6, background: plan.accent }}/>
+          <div style={{ padding: 12 }}>
+            <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', letterSpacing: '0.08em' }}>TRIPCRAFT · 共有プラン</div>
+            <div className="serif" style={{ fontSize: 17, fontWeight: 500, marginTop: 4 }}>{plan.title}</div>
+            <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3 }}>石川 · 3泊4日 · {plan.meta.spots}スポット · {plan.meta.cost}/人</div>
+            <div style={{ fontSize: 11, color: '#3B5BA5', marginTop: 6, fontWeight: 600 }}>tripcraft.app/p/{plan.id}a3k</div>
+          </div>
+        </div>
+        <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 10, border: '1px solid #e8e4dc', fontFamily: 'inherit', fontSize: 12, resize: 'none', outline: 'none', boxSizing: 'border-box' }}/>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 100px' }}>
+        <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', padding: '8px 4px', letterSpacing: '0.08em' }}>最近のトーク</div>
+        {contacts.map((c, idx) => {
+          const on = selected.includes(c.id);
+          return (
+            <div key={c.id} onClick={() => toggle(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', cursor: 'pointer' }}>
+              <div style={{ width: 40, height: 40, borderRadius: c.group ? 8 : '50%', background: colors[idx % 5], color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{c.name.charAt(0)}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</div>
+                <div style={{ fontSize: 11, color: '#a5a5a5', marginTop: 1 }}>{c.sub}</div>
+              </div>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', border: on ? 'none' : '1.5px solid #d5d1c8', background: on ? '#141414' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {on && <svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.8" fill="none"/></svg>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 38px', background: 'white', borderTop: '1px solid #efede8' }}>
+        <button disabled={selected.length === 0} onClick={() => setSent(true)} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: selected.length ? '#141414' : '#d5d1c8', color: 'white', fontSize: 14, fontWeight: 600, cursor: selected.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+          {selected.length ? `${selected.length}件に送信` : '相手を選択'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────
+function App() {
+  const [screen, setScreen] = useState(() => { try { return localStorage.getItem('tc_screen') || 'home'; } catch(e) { return 'home'; } });
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [showAI, setShowAI] = useState(false);
+  const [tripState, setTripState] = useState({
+    destination: '石川（金沢・能登）', nights: 3, people: 2,
+    spots: [
+      { id: 'pre1', name: '兼六園', cat: '庭園' },
+      { id: 'pre2', name: 'ひがし茶屋街', cat: '街歩き' },
+      { id: 'pre3', name: '輪島朝市', cat: '食' },
+      { id: 'pre4', name: '千枚田', cat: '絶景' },
+    ],
+    hotelMode: 'booked',
+    hotels: ['金沢白鳥路ホテル', '', '能登の宿（未定）'],
+  });
+
+  useEffect(() => { try { localStorage.setItem('tc_screen', screen); } catch(e) {} }, [screen]);
+
+  const go = (target, plan) => { if (plan) setSelectedPlan(plan); setScreen(target); };
+
+  const renderScreen = () => {
+    switch (screen) {
+      case 'home':    return <HomeScreen state={tripState} setState={setTripState} onGenerate={() => go('loading')}/>;
+      case 'loading': return <LoadingScreen onDone={() => { setSelectedPlan(PLANS[0]); go('detail'); }}/>;
+      case 'detail':  return <DetailScreen plan={selectedPlan || PLANS[0]} onPlanChange={p => setSelectedPlan(p)} onBack={() => go('home')} onShare={() => go('share')} onAIChat={() => setShowAI(true)}/>;
+      case 'share':   return <ShareScreen plan={selectedPlan || PLANS[0]} onBack={() => go('detail')} onDone={() => go('detail')}/>;
+      default:        return <HomeScreen state={tripState} setState={setTripState} onGenerate={() => go('loading')}/>;
+    }
+  };
+
+  const navItem = (label, target, count) => (
+    <button onClick={() => setScreen(target)} style={{ border: 'none', background: screen === target ? '#141414' : 'transparent', color: screen === target ? 'white' : '#7a7a7a', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit' }}>
+      <span style={{ opacity: 0.6, marginRight: 4 }}>{count}</span>{label}
+    </button>
+  );
+
+  return (
+    <div className="stage">
+      <div style={{ position: 'fixed', top: 20, left: 20, zIndex: 10, background: 'white', borderRadius: 12, padding: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.06)', fontFamily: 'JetBrains Mono, monospace' }}>
+        <div style={{ fontSize: 10, color: '#a5a5a5', marginBottom: 6, letterSpacing: '0.08em' }}>TRIPCRAFT · v0.1</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {navItem('入力',   'home',    '01')}
+          {navItem('生成中', 'loading', '02')}
+          {navItem('プラン', 'detail',  '03')}
+          {navItem('共有',   'share',   '04')}
+        </div>
+      </div>
+
+      <IOSDevice width={402} height={874}>
+        {renderScreen()}
+        {showAI && <AIChat onClose={() => setShowAI(false)} plan={selectedPlan || PLANS[0]} onApply={() => setShowAI(false)}/>}
+      </IOSDevice>
+
+      <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10, maxWidth: 260, fontSize: 11, color: '#555', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)', padding: 12, borderRadius: 10, border: '1px solid #e8e4dc', fontFamily: 'Noto Sans JP' }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>TripCraft プロトタイプ</div>
+        <div style={{ lineHeight: 1.5 }}>石川3泊4日の例。左のナビで画面遷移、プラン詳細の上部タブでAIが提案した3つのプランを切り替え。右下の「調整」ボタンからAIで修正。</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
