@@ -437,12 +437,10 @@ function GoogleMapView({ pins = [], route = [], highlight, height = 280, accentC
     if (!ready || !mapRef.current || !window.google?.maps) return;
     const geocoder = new google.maps.Geocoder();
 
-    // AI生成ピン(pin_*)はスポット名でジオコーディング、それ以外はlat/lngをそのまま使う
+    // 全ピンをスポット名でジオコーディング（キャッシュ済みなら即返却）
     const resolve = (pin) => {
-      if (pin.id && pin.id.startsWith('pin_') && pin.label) {
-        return _geocodeByLabel(geocoder, pin.label).then(coords => coords ? { ...pin, ...coords } : pin);
-      }
-      return Promise.resolve(pin);
+      if (!pin.label) return Promise.resolve(pin);
+      return _geocodeByLabel(geocoder, pin.label).then(coords => coords ? { ...pin, ...coords } : pin);
     };
 
     Promise.all(pins.map(resolve)).then(resolved => {
@@ -875,12 +873,17 @@ function DetailScreen({ plan, onBack, onShare, onAIChat, onPlanChange }) {
     const pins = [];
     let n = 1;
     day.items.forEach(it => {
-      if (it.type !== 'stay') return;
-      if (it.spot && MAP_PINS[it.spot]) {
-        pins.push({ id: it.spot, ...MAP_PINS[it.spot], n: n++ });
-      } else if (it.spot_lat && it.spot_lng) {
-        pins.push({ id: `pin_${n}`, lat: it.spot_lat, lng: it.spot_lng, x: 0.5, y: 0.5, label: it.title, n: n++ });
-      }
+      if (it.type !== 'stay' || !it.title) return;
+      const mapPin = it.spot && MAP_PINS[it.spot];
+      pins.push({
+        id: mapPin ? it.spot : `pin_${n}`,
+        lat: mapPin ? mapPin.lat : (it.spot_lat || null),
+        lng: mapPin ? mapPin.lng : (it.spot_lng || null),
+        label: mapPin ? mapPin.label : it.title,
+        x: mapPin ? mapPin.x : 0.5,
+        y: mapPin ? mapPin.y : 0.5,
+        n: n++,
+      });
     });
     return pins;
   }, [day]);
