@@ -800,7 +800,7 @@ function AIChat({ onClose, plan, onApply }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: `${systemPrompt}\n\nユーザーの要望: ${userText}` }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
       }),
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
