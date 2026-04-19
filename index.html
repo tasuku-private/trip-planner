@@ -439,7 +439,7 @@ function TimelineDay({ day, onSpotTap, activeSpot }) {
 }
 
 // ─── Home Screen ─────────────────────────────────────────
-function HomeScreen({ onGenerate, state, setState }) {
+function HomeScreen({ onGenerate, state, setState, error }) {
   const [spotInput, setSpotInput] = useState('');
   const addSpot = (name) => {
     if (!name.trim()) return;
@@ -462,6 +462,17 @@ function HomeScreen({ onGenerate, state, setState }) {
               onChange={e => setState({ ...state, destination: e.target.value })}
               placeholder="例: 石川（金沢・能登）"
               style={{ width: '100%', border: 'none', outline: 'none', fontSize: 18, fontWeight: 600, fontFamily: 'inherit', background: 'transparent', color: '#141414' }}
+            />
+          </div>
+          <div style={{ height: 1, background: '#efede8', margin: '14px 0' }}/>
+          {/* 出発日 */}
+          <div>
+            <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 6 }}>出発日</div>
+            <input
+              type="date"
+              value={state.startDate || ''}
+              onChange={e => setState({ ...state, startDate: e.target.value })}
+              style={{ border: 'none', outline: 'none', fontSize: 15, fontWeight: 500, fontFamily: 'inherit', background: 'transparent', color: '#141414', width: '100%' }}
             />
           </div>
           <div style={{ height: 1, background: '#efede8', margin: '14px 0' }}/>
@@ -540,12 +551,12 @@ function HomeScreen({ onGenerate, state, setState }) {
           </div>
           {(state.hotelMode || 'booked') === 'booked' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[0, 1, 2].map(i => {
+              {Array.from({ length: state.nights || 3 }, (_, i) => {
                 const hotels = state.hotels || [];
                 return (
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'white', borderRadius: 10, border: '1px solid #e8e4dc', padding: '8px 12px' }}>
                     <div style={{ width: 30, flexShrink: 0, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: '#a5a5a5' }}>N{i + 1}</div>
-                    <input value={hotels[i] || ''} onChange={e => { const next = [...hotels]; next[i] = e.target.value; setState({ ...state, hotels: next }); }} placeholder={i === 0 ? '例: 金沢白鳥路ホテル' : i === 1 ? '2泊目のホテル' : '3泊目のホテル'} style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 2px', fontSize: 13, fontFamily: 'inherit', background: 'transparent' }}/>
+                    <input value={hotels[i] || ''} onChange={e => { const next = [...(state.hotels||[])]; next[i] = e.target.value; setState({ ...state, hotels: next }); }} placeholder={`${i+1}泊目のホテル`} style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 2px', fontSize: 13, fontFamily: 'inherit', background: 'transparent' }}/>
                     {(hotels[i] || '').trim() && <div style={{ fontSize: 10, color: '#3d6b5a', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }}>✓</div>}
                   </div>
                 );
@@ -566,7 +577,8 @@ function HomeScreen({ onGenerate, state, setState }) {
       </div>
 
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 20px 38px', background: 'linear-gradient(to top, #faf8f4 70%, rgba(250,248,244,0))' }}>
-        <button onClick={onGenerate} disabled={state.spots.length === 0} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', cursor: state.spots.length ? 'pointer' : 'not-allowed', background: state.spots.length ? '#141414' : '#d5d1c8', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'inherit', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {error && <div style={{ fontSize: 12, color: '#a34b3b', marginBottom: 8, textAlign: 'center' }}>{error}</div>}
+        <button onClick={onGenerate} disabled={!state.destination.trim()} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', cursor: state.destination.trim() ? 'pointer' : 'not-allowed', background: state.destination.trim() ? '#141414' : '#d5d1c8', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'inherit', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="white"/></svg>
           3つのプランを生成する
         </button>
@@ -917,34 +929,106 @@ function ShareScreen({ plan, onBack, onDone }) {
   );
 }
 
+// ─── Plan Generation ─────────────────────────────────────
+const GEMINI_KEY = 'AIzaSyCd6hixMPTagnB3_INrpQ0dsXqb6xJqkeE';
+
+async function generatePlansWithGemini(tripState) {
+  const { destination, nights, people, spots, hotels, hotelMode, startDate } = tripState;
+  const days = nights + 1;
+
+  const getDayDate = (i) => {
+    if (!startDate) return '';
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    const wdays = ['日','月','火','水','木','金','土'];
+    return `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} (${wdays[d.getDay()]})`;
+  };
+
+  const dayDates = Array.from({length: days}, (_, i) => getDayDate(i));
+  const spotsText = spots.length
+    ? spots.map(s => s.day ? `${s.name}（Day${s.day}希望）` : s.name).join('、')
+    : 'AIにおまかせ';
+  const hotelText = hotelMode === 'booked'
+    ? Array.from({length: nights}, (_, i) => `${i+1}泊目: ${(hotels||[])[i]||'未定'}`).join('、')
+    : 'AIが宿泊先も提案';
+
+  const dateHint = dayDates[0] ? `出発${dayDates[0]}、` : '';
+  const dayDateHint = dayDates.length
+    ? dayDates.map((d,i) => `Day${i+1}="${d||`Day${i+1}`}"`).join('、')
+    : '';
+
+  const prompt = `旅行プラン3案をJSONのみで出力。説明文・コードブロック不要。
+
+条件: 行き先=${destination}、${dateHint}${nights}泊${days}日、${people}人
+希望スポット: ${spotsText}
+宿泊: ${hotelText}
+
+形式(JSON配列3要素):
+[{"id":"p1","title":"タイトル10字以内","tagline":"25字以内","accent":"#3B5BA5","meta":{"walk":"X.Xkm","cost":"¥XX,XXX","spots":数字,"rating":4.5},"highlights":["A","B","C"],"days":[{"label":"Day 1","date":"${dayDates[0]||''}","sub":"テーマ","items":[{"t":"09:00","type":"stay","title":"名称","dur":90,"note":"メモ"},{"t":"10:30","type":"move","title":"移動","dur":20,"mode":"電車"}]}]},{"id":"p2","accent":"#A34B3B",...},{"id":"p3","accent":"#3D6B5A",...}]
+
+ルール:
+- type="stay"(観光・食事)またはtype="move"(移動)のみ
+- moveにはmode必須("電車"/"新幹線"/"バス"/"徒歩"/"車"/"タクシー")
+- durは分の整数、移動時間は実際の所要時間を基準に
+- 日付: ${dayDateHint||'適切に設定'}
+- JSONのみ、前後余分な文字禁止`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+      }),
+    }
+  );
+  if (!res.ok) throw new Error(`Gemini API ${res.status}`);
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  return JSON.parse(clean);
+}
+
 // ─── App ──────────────────────────────────────────────────
 function App() {
-  const [screen, setScreen] = useState(() => { try { return localStorage.getItem('tc_screen') || 'home'; } catch(e) { return 'home'; } });
+  const [screen, setScreen] = useState('home');
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [showAI, setShowAI] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState('');
   const [tripState, setTripState] = useState({
-    destination: '石川（金沢・能登）', nights: 3, people: 2,
-    spots: [
-      { id: 'pre1', name: '兼六園', cat: '庭園' },
-      { id: 'pre2', name: 'ひがし茶屋街', cat: '街歩き' },
-      { id: 'pre3', name: '輪島朝市', cat: '食' },
-      { id: 'pre4', name: '千枚田', cat: '絶景' },
-    ],
-    hotelMode: 'booked',
-    hotels: ['金沢白鳥路ホテル', '', '能登の宿（未定）'],
+    destination: '', nights: 3, people: 2,
+    spots: [], startDate: '',
+    hotelMode: 'booked', hotels: ['', '', ''],
   });
-
-  useEffect(() => { try { localStorage.setItem('tc_screen', screen); } catch(e) {} }, [screen]);
 
   const go = (target, plan) => { if (plan) setSelectedPlan(plan); setScreen(target); };
 
+  const handleGenerate = async () => {
+    if (!tripState.destination.trim()) { setGenError('行き先を入力してください'); return; }
+    setGenError('');
+    setGenerating(true);
+    try {
+      const plans = await generatePlansWithGemini(tripState);
+      if (!Array.isArray(plans) || plans.length === 0) throw new Error('プランの形式が不正です');
+      window.PLANS = plans;
+      setSelectedPlan(plans[0]);
+      setScreen('detail');
+    } catch(e) {
+      setGenError(`生成失敗: ${e.message}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const renderScreen = () => {
     switch (screen) {
-      case 'home':    return <HomeScreen state={tripState} setState={setTripState} onGenerate={() => go('loading')}/>;
-      case 'loading': return <LoadingScreen onDone={() => { setSelectedPlan(PLANS[0]); go('detail'); }}/>;
-      case 'detail':  return <DetailScreen plan={selectedPlan || PLANS[0]} onPlanChange={p => setSelectedPlan(p)} onBack={() => go('home')} onShare={() => go('share')} onAIChat={() => setShowAI(true)}/>;
-      case 'share':   return <ShareScreen plan={selectedPlan || PLANS[0]} onBack={() => go('detail')} onDone={() => go('detail')}/>;
-      default:        return <HomeScreen state={tripState} setState={setTripState} onGenerate={() => go('loading')}/>;
+      case 'home':   return <HomeScreen state={tripState} setState={setTripState} onGenerate={handleGenerate} error={genError}/>;
+      case 'detail': return <DetailScreen plan={selectedPlan || PLANS[0]} onPlanChange={p => setSelectedPlan(p)} onBack={() => go('home')} onShare={() => go('share')} onAIChat={() => setShowAI(true)}/>;
+      case 'share':  return <ShareScreen plan={selectedPlan || PLANS[0]} onBack={() => go('detail')} onDone={() => go('detail')}/>;
+      default:       return <HomeScreen state={tripState} setState={setTripState} onGenerate={handleGenerate} error={genError}/>;
     }
   };
 
@@ -952,6 +1036,13 @@ function App() {
     <div className="stage">
       {renderScreen()}
       {showAI && <AIChat onClose={() => setShowAI(false)} plan={selectedPlan || PLANS[0]} onApply={() => setShowAI(false)}/>}
+      {generating && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(250,248,244,0.96)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+          <div style={{ width: 40, height: 40, border: '3px solid #e8e4dc', borderTop: '3px solid #3B5BA5', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+          <div style={{ fontSize: 14, color: '#7a7a7a' }}>Geminiがプランを生成中...</div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
     </div>
   );
 }
