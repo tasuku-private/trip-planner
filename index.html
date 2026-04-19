@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>TripCraft — 旅行計画アプリ</title>
-<meta name="viewport" content="width=1200, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Serif+JP:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -452,29 +452,36 @@ function HomeScreen({ onGenerate, state, setState }) {
 
   return (
     <div className="screen fade-in" style={{ background: '#faf8f4' }}>
-      <div style={{ padding: '56px 20px 14px' }}>
-        <div className="mono" style={{ fontSize: 11, color: '#a5a5a5', letterSpacing: '0.1em' }}>TRIPCRAFT</div>
-        <div className="serif" style={{ fontSize: 30, fontWeight: 500, marginTop: 6, lineHeight: 1.2 }}>あなたの旅を、<br/>AIがデザインする。</div>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 120px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 120px' }}>
         <div className="card" style={{ padding: 16, marginTop: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 11, color: '#a5a5a5' }}>行き先</div>
-              <div style={{ fontSize: 18, fontWeight: 600, marginTop: 2 }}>{state.destination || '石川'}</div>
-            </div>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#a5a5a5" strokeWidth="2" strokeLinecap="round"/></svg>
+          {/* 行き先 */}
+          <div>
+            <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 6 }}>行き先</div>
+            <input
+              value={state.destination}
+              onChange={e => setState({ ...state, destination: e.target.value })}
+              placeholder="例: 石川（金沢・能登）"
+              style={{ width: '100%', border: 'none', outline: 'none', fontSize: 18, fontWeight: 600, fontFamily: 'inherit', background: 'transparent', color: '#141414' }}
+            />
           </div>
           <div style={{ height: 1, background: '#efede8', margin: '14px 0' }}/>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: 11, color: '#a5a5a5' }}>期間</div>
-              <div style={{ fontSize: 14, fontWeight: 500, marginTop: 2 }}>{state.nights}泊{state.nights + 1}日 · 5/2〜5/5</div>
+          {/* 期間・人数 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 6 }}>泊数</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => setState({ ...state, nights: Math.max(1, state.nights - 1) })} style={{ border: '1px solid #e8e4dc', background: 'white', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <span style={{ fontSize: 15, fontWeight: 600, minWidth: 60, textAlign: 'center' }}>{state.nights}泊{state.nights + 1}日</span>
+                <button onClick={() => setState({ ...state, nights: Math.min(14, state.nights + 1) })} style={{ border: '1px solid #e8e4dc', background: 'white', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 11, color: '#a5a5a5' }}>人数</div>
-              <div style={{ fontSize: 14, fontWeight: 500, marginTop: 2 }}>{state.people}人</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 6 }}>人数</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => setState({ ...state, people: Math.max(1, state.people - 1) })} style={{ border: '1px solid #e8e4dc', background: 'white', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <span style={{ fontSize: 15, fontWeight: 600, minWidth: 32, textAlign: 'center' }}>{state.people}人</span>
+                <button onClick={() => setState({ ...state, people: Math.min(20, state.people + 1) })} style={{ border: '1px solid #e8e4dc', background: 'white', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              </div>
             </div>
           </div>
         </div>
