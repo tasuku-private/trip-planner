@@ -251,7 +251,7 @@ window.PLANS = [
 window.MAP_PINS = {
   s1: { x: 0.52, y: 0.58, lat: 36.5617, lng: 136.6621, label: '兼六園' },
   s2: { x: 0.53, y: 0.61, lat: 36.5566, lng: 136.6564, label: '21世紀美術館' },
-  s3: { x: 0.56, y: 0.51, lat: 36.5726, lng: 136.6680, label: 'ひがし茶屋街' },
+  s3: { x: 0.56, y: 0.51, lat: 36.5726, lng: 136.6648, label: 'ひがし茶屋街' },
   s4: { x: 0.51, y: 0.54, lat: 36.5694, lng: 136.6553, label: '近江町市場' },
   s5: { x: 0.38, y: 0.32, lat: 36.7342, lng: 136.6447, label: '千里浜' },
   s6: { x: 0.62, y: 0.12, lat: 37.3901, lng: 136.9005, label: '輪島朝市' },
@@ -408,9 +408,23 @@ function MapView({ pins = [], route = [], highlight, dark = false, height = 280 
 }
 
 // ─── Google Map View ─────────────────────────────────────
+const _geocodeCache = new Map();
+
+function _geocodeByLabel(geocoder, label) {
+  if (_geocodeCache.has(label)) return Promise.resolve(_geocodeCache.get(label));
+  return new Promise(resolve => {
+    geocoder.geocode({ address: label, region: 'JP' }, (results, status) => {
+      const coords = (status === 'OK' && results[0])
+        ? { lat: results[0].geometry.location.lat(), lng: results[0].geometry.location.lng() }
+        : null;
+      if (coords) _geocodeCache.set(label, coords);
+      resolve(coords);
+    });
+  });
+}
+
 function GoogleMapView({ pins = [], route = [], highlight, height = 280, accentColor = '#3B5BA5' }) {
   const mapRef = useRef(null);
-  const instanceRef = useRef(null);
   const [ready, setReady] = useState(!!window.google?.maps);
   const [err, setErr] = useState(null);
 
@@ -420,54 +434,64 @@ function GoogleMapView({ pins = [], route = [], highlight, height = 280, accentC
   }, []);
 
   useEffect(() => {
-    if (!ready || !mapRef.current) return;
-    const validPins = pins.filter(p => p.lat && p.lng);
-    if (validPins.length === 0) return;
+    if (!ready || !mapRef.current || !window.google?.maps) return;
+    const geocoder = new google.maps.Geocoder();
 
-    const bounds = new google.maps.LatLngBounds();
-    validPins.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-    const center = { lat: bounds.getCenter().lat(), lng: bounds.getCenter().lng() };
+    // AI生成ピン(pin_*)はスポット名でジオコーディング、それ以外はlat/lngをそのまま使う
+    const resolve = (pin) => {
+      if (pin.id && pin.id.startsWith('pin_') && pin.label) {
+        return _geocodeByLabel(geocoder, pin.label).then(coords => coords ? { ...pin, ...coords } : pin);
+      }
+      return Promise.resolve(pin);
+    };
 
-    const map = new google.maps.Map(mapRef.current, {
-      center,
-      zoom: 13,
-      disableDefaultUI: true,
-      zoomControl: true,
-      gestureHandling: 'greedy',
-      styles: [{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }],
-    });
-    instanceRef.current = map;
+    Promise.all(pins.map(resolve)).then(resolved => {
+      const valid = resolved.filter(p => p.lat && p.lng);
+      if (valid.length === 0 || !mapRef.current) return;
 
-    validPins.forEach((pin, i) => {
-      const isHi = highlight === pin.id;
-      new google.maps.Marker({
-        position: { lat: pin.lat, lng: pin.lng },
-        map,
-        label: { text: String(i + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' },
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: isHi ? 15 : 11,
-          fillColor: isHi ? '#141414' : accentColor,
-          fillOpacity: 1,
-          strokeColor: 'white',
-          strokeWeight: 2,
-        },
-        title: pin.label,
-        zIndex: isHi ? 100 : i,
+      const bounds = new google.maps.LatLngBounds();
+      valid.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+
+      const map = new google.maps.Map(mapRef.current, {
+        center: { lat: bounds.getCenter().lat(), lng: bounds.getCenter().lng() },
+        zoom: 13,
+        disableDefaultUI: true,
+        zoomControl: true,
+        gestureHandling: 'greedy',
+        styles: [{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }],
       });
-    });
 
-    if (validPins.length > 1) {
-      new google.maps.Polyline({
-        path: validPins.map(p => ({ lat: p.lat, lng: p.lng })),
-        strokeColor: accentColor,
-        strokeOpacity: 0.75,
-        strokeWeight: 3,
-        geodesic: true,
-        map,
+      valid.forEach((pin, i) => {
+        const isHi = highlight === pin.id;
+        new google.maps.Marker({
+          position: { lat: pin.lat, lng: pin.lng },
+          map,
+          label: { text: String(i + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: isHi ? 15 : 11,
+            fillColor: isHi ? '#141414' : accentColor,
+            fillOpacity: 1,
+            strokeColor: 'white',
+            strokeWeight: 2,
+          },
+          title: pin.label,
+          zIndex: isHi ? 100 : i,
+        });
       });
-      map.fitBounds(bounds, 50);
-    }
+
+      if (valid.length > 1) {
+        new google.maps.Polyline({
+          path: valid.map(p => ({ lat: p.lat, lng: p.lng })),
+          strokeColor: accentColor,
+          strokeOpacity: 0.75,
+          strokeWeight: 3,
+          geodesic: true,
+          map,
+        });
+        map.fitBounds(bounds, 50);
+      }
+    });
   }, [ready, JSON.stringify(pins), highlight]);
 
   if (!GOOGLE_KEY) return <MapView pins={pins} route={route} highlight={highlight} height={height}/>;
