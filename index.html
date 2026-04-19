@@ -265,7 +265,7 @@ window.MAP_PINS = {
 <!-- All JSX inlined -->
 <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useMemo } = React;
-const GEMINI_KEY = 'AIzaSyCd6hixMPTagnB3_INrpQ0dsXqb6xJqkeE';
+const GEMINI_KEY = 'AIzaSyBOGWts17o9WcCxCQdfi1YGtzqi4mYzuHQ';
 
 // ─── iOS Frame ───────────────────────────────────────────
 function IOSStatusBar({ dark = false, time = '9:41' }) {
@@ -784,7 +784,7 @@ function AIChat({ onClose, plan, onApply }) {
 
   useEffect(() => { bottomRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }); }, [messages, thinking]);
 
-  const GEMINI_API_KEY = 'AIzaSyCd6hixMPTagnB3_INrpQ0dsXqb6xJqkeE';
+  const GEMINI_API_KEY = 'AIzaSyBOGWts17o9WcCxCQdfi1YGtzqi4mYzuHQ';
   const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const callGemini = async (userText) => {
