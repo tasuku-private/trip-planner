@@ -442,7 +442,7 @@ function TimelineDay({ day, onSpotTap, activeSpot }) {
 // ─── Home Screen ─────────────────────────────────────────
 function HomeScreen({ onGenerate, state, setState, error }) {
   const [spotInput, setSpotInput] = useState('');
-  const [suggestions, setSuggestions] = useState(['兼六園', '金沢21世紀美術館', 'ひがし茶屋街', '近江町市場', '千里浜', '輪島朝市', '白米千枚田', '妙立寺']);
+  const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(false);
   const addSpot = (name) => {
     if (!name.trim()) return;
@@ -1018,7 +1018,11 @@ async function generatePlansWithGemini(tripState) {
       }),
     }
   );
-  if (!res.ok) throw new Error(`Gemini API ${res.status}`);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const errMsg = errData?.error?.message || `Gemini API ${res.status}`;
+    throw new Error(errMsg);
+  }
   const data = await res.json();
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
   const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
@@ -1051,10 +1055,7 @@ function App() {
       setSelectedPlan(plans[0]);
       setScreen('detail');
     } catch(e) {
-      const msg = e.message.includes('403')
-        ? '生成失敗: APIキー制限エラー。ライブサイト(GitHub Pages)からアクセスしてください'
-        : `生成失敗: ${e.message}`;
-      setGenError(msg);
+      setGenError(`生成失敗: ${e.message}`);
     } finally {
       setGenerating(false);
     }
