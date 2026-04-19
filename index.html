@@ -538,13 +538,15 @@ function HomeScreen({ onGenerate, state, setState, error }) {
               return (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', borderRadius: 10, border: '1px solid #e8e4dc', padding: '8px 10px 8px 12px' }}>
                   <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{s.name}</div>
-                  <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 8, background: '#f5f2ec' }}>
-                    <button onClick={() => setDay(null)} style={{ border: 'none', background: curDay === null ? '#141414' : 'transparent', color: curDay === null ? 'white' : '#7a7a7a', fontSize: 10, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>おまかせ</button>
-                    {Array.from({ length: totalDays }).map((_, i) => {
-                      const d = i + 1; const on = curDay === d;
-                      return <button key={d} onClick={() => setDay(d)} style={{ border: 'none', background: on ? '#141414' : 'transparent', color: on ? 'white' : '#7a7a7a', fontSize: 10, padding: '4px 7px', borderRadius: 6, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, minWidth: 22 }}>D{d}</button>;
-                    })}
-                  </div>
+                  {state.nights > 0 && (
+                    <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 8, background: '#f5f2ec' }}>
+                      <button onClick={() => setDay(null)} style={{ border: 'none', background: curDay === null ? '#141414' : 'transparent', color: curDay === null ? 'white' : '#7a7a7a', fontSize: 10, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>おまかせ</button>
+                      {Array.from({ length: totalDays }).map((_, i) => {
+                        const d = i + 1; const on = curDay === d;
+                        return <button key={d} onClick={() => setDay(d)} style={{ border: 'none', background: on ? '#141414' : 'transparent', color: on ? 'white' : '#7a7a7a', fontSize: 10, padding: '4px 7px', borderRadius: 6, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, minWidth: 22 }}>D{d}</button>;
+                      })}
+                    </div>
+                  )}
                   <button onClick={() => removeSpot(s.id)} style={{ border: 'none', background: '#f5f2ec', color: '#7a7a7a', width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
                 </div>
               );
@@ -1037,7 +1039,7 @@ function App() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const [tripState, setTripState] = useState({
-    destination: '', nights: 3, people: 2,
+    destination: '', nights: 1, people: 2,
     spots: [], startDate: '',
     hotelMode: 'booked', hotels: ['', '', ''],
   });
