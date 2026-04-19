@@ -265,6 +265,7 @@ window.MAP_PINS = {
 <!-- All JSX inlined -->
 <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useMemo } = React;
+const GEMINI_KEY = 'AIzaSyCd6hixMPTagnB3_INrpQ0dsXqb6xJqkeE';
 
 // ─── iOS Frame ───────────────────────────────────────────
 function IOSStatusBar({ dark = false, time = '9:41' }) {
@@ -441,6 +442,8 @@ function TimelineDay({ day, onSpotTap, activeSpot }) {
 // ─── Home Screen ─────────────────────────────────────────
 function HomeScreen({ onGenerate, state, setState, error }) {
   const [spotInput, setSpotInput] = useState('');
+  const [suggestions, setSuggestions] = useState(['兼六園', '金沢21世紀美術館', 'ひがし茶屋街', '近江町市場', '千里浜', '輪島朝市', '白米千枚田', '妙立寺']);
+  const [loadingSugg, setLoadingSugg] = useState(false);
   const addSpot = (name) => {
     if (!name.trim()) return;
     if (state.spots.find(s => s.name === name)) return;
@@ -448,7 +451,29 @@ function HomeScreen({ onGenerate, state, setState, error }) {
     setSpotInput('');
   };
   const removeSpot = (id) => setState({ ...state, spots: state.spots.filter(s => s.id !== id) });
-  const suggestions = ['兼六園', '金沢21世紀美術館', 'ひがし茶屋街', '近江町市場', '千里浜', '輪島朝市', '白米千枚田', '妙立寺'];
+  const fetchSuggestions = async () => {
+    if (!state.destination.trim()) return;
+    setLoadingSugg(true);
+    try {
+      const prompt = `${state.destination}の観光スポット・グルメ・体験を10個、JSONの文字列配列のみで返してください。説明なし、コードブロックなし。例: ["スポット1","スポット2",...]`;
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.5, maxOutputTokens: 300 },
+        }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const data = await res.json();
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+      const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+      const list = JSON.parse(clean);
+      if (Array.isArray(list)) setSuggestions(list);
+    } catch(e) { /* keep current suggestions */ } finally {
+      setLoadingSugg(false);
+    }
+  };
 
   return (
     <div className="screen fade-in" style={{ background: '#faf8f4' }}>
@@ -508,7 +533,7 @@ function HomeScreen({ onGenerate, state, setState, error }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
             {state.spots.map(s => {
               const setDay = (d) => setState({ ...state, spots: state.spots.map(x => x.id === s.id ? { ...x, day: d } : x) });
-              const totalDays = (state.nights || 3) + 1;
+              const totalDays = state.nights + 1;
               const curDay = s.day ?? null;
               return (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', borderRadius: 10, border: '1px solid #e8e4dc', padding: '8px 10px 8px 12px' }}>
@@ -534,7 +559,16 @@ function HomeScreen({ onGenerate, state, setState, error }) {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', marginBottom: 8, letterSpacing: '0.08em' }}>人気のスポット</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', letterSpacing: '0.08em' }}>
+              {state.destination.trim() ? `${state.destination}のおすすめ` : '人気のスポット'}
+            </div>
+            {state.destination.trim() && (
+              <button onClick={fetchSuggestions} disabled={loadingSugg} style={{ border: 'none', background: 'transparent', cursor: loadingSugg ? 'default' : 'pointer', fontSize: 11, color: '#3B5BA5', padding: '2px 6px', borderRadius: 6, fontFamily: 'inherit' }}>
+                {loadingSugg ? '読込中...' : '↻ 更新'}
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {suggestions.filter(n => !state.spots.find(s => s.name === n)).map(name => (
               <button key={name} onClick={() => addSpot(name)} className="chip" style={{ cursor: 'pointer', fontFamily: 'inherit' }}>+ {name}</button>
@@ -932,8 +966,6 @@ function ShareScreen({ plan, onBack, onDone }) {
 }
 
 // ─── Plan Generation ─────────────────────────────────────
-const GEMINI_KEY = 'AIzaSyCd6hixMPTagnB3_INrpQ0dsXqb6xJqkeE';
-
 async function generatePlansWithGemini(tripState) {
   const { destination, nights, people, spots, hotels, hotelMode, startDate } = tripState;
   const days = nights + 1;
@@ -1019,7 +1051,10 @@ function App() {
       setSelectedPlan(plans[0]);
       setScreen('detail');
     } catch(e) {
-      setGenError(`生成失敗: ${e.message}`);
+      const msg = e.message.includes('403')
+        ? '生成失敗: APIキー制限エラー。ライブサイト(GitHub Pages)からアクセスしてください'
+        : `生成失敗: ${e.message}`;
+      setGenError(msg);
     } finally {
       setGenerating(false);
     }
