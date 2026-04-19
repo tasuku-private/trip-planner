@@ -456,7 +456,7 @@ function HomeScreen({ onGenerate, state, setState, error }) {
     setLoadingSugg(true);
     try {
       const prompt = `${state.destination}の観光スポット・グルメ・体験を10個、JSONの文字列配列のみで返してください。説明なし、コードブロックなし。例: ["スポット1","スポット2",...]`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${GEMINI_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -785,7 +785,7 @@ function AIChat({ onClose, plan, onApply }) {
   useEffect(() => { bottomRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }); }, [messages, thinking]);
 
   const GEMINI_API_KEY = 'AIzaSyAUkgnQxq83jbWy4yOWrCGUgOiEv6p0yvY';
-  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${GEMINI_API_KEY}`;
 
   const callGemini = async (userText) => {
     const systemPrompt = `あなたは旅行プランナーAIアシスタントです。
@@ -1010,7 +1010,7 @@ async function generatePlansWithGemini(tripState) {
 - JSONのみ、前後余分な文字禁止`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${GEMINI_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
