@@ -81,6 +81,7 @@ html, body {
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
 <div class="stage-bg"></div>
@@ -248,17 +249,17 @@ window.PLANS = [
 ];
 
 window.MAP_PINS = {
-  s1: { x: 0.52, y: 0.58, label: '兼六園' },
-  s2: { x: 0.53, y: 0.61, label: '21世紀美術館' },
-  s3: { x: 0.56, y: 0.51, label: 'ひがし茶屋街' },
-  s4: { x: 0.51, y: 0.54, label: '近江町市場' },
-  s5: { x: 0.38, y: 0.32, label: '千里浜' },
-  s6: { x: 0.62, y: 0.12, label: '輪島朝市' },
-  s7: { x: 0.66, y: 0.14, label: '白米千枚田' },
-  s8: { x: 0.50, y: 0.60, label: '妙立寺' },
-  hotel1: { x: 0.53, y: 0.58, label: '金沢の宿' },
-  hotel2: { x: 0.63, y: 0.15, label: '能登の宿' },
-  airport: { x: 0.30, y: 0.70, label: '小松空港' },
+  s1: { x: 0.52, y: 0.58, lat: 36.5617, lng: 136.6621, label: '兼六園' },
+  s2: { x: 0.53, y: 0.61, lat: 36.5566, lng: 136.6564, label: '21世紀美術館' },
+  s3: { x: 0.56, y: 0.51, lat: 36.5726, lng: 136.6680, label: 'ひがし茶屋街' },
+  s4: { x: 0.51, y: 0.54, lat: 36.5694, lng: 136.6553, label: '近江町市場' },
+  s5: { x: 0.38, y: 0.32, lat: 36.7342, lng: 136.6447, label: '千里浜' },
+  s6: { x: 0.62, y: 0.12, lat: 37.3901, lng: 136.9005, label: '輪島朝市' },
+  s7: { x: 0.66, y: 0.14, lat: 37.3734, lng: 136.9246, label: '白米千枚田' },
+  s8: { x: 0.50, y: 0.60, lat: 36.5591, lng: 136.6498, label: '妙立寺' },
+  hotel1: { x: 0.53, y: 0.58, lat: 36.5617, lng: 136.6621, label: '金沢の宿' },
+  hotel2: { x: 0.63, y: 0.15, lat: 37.3901, lng: 136.9005, label: '能登の宿' },
+  airport: { x: 0.30, y: 0.70, lat: 36.3944, lng: 136.4069, label: '小松空港' },
 };
 </script>
 
@@ -266,6 +267,21 @@ window.MAP_PINS = {
 <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useRef, useMemo } = React;
 let GEMINI_KEY = '';
+let GOOGLE_KEY = '';
+let mapsApiPromise = null;
+
+function loadMapsApi() {
+  if (window.google?.maps) return Promise.resolve();
+  if (mapsApiPromise) return mapsApiPromise;
+  mapsApiPromise = new Promise((resolve, reject) => {
+    window._mapsReady = () => { resolve(); };
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&callback=_mapsReady&language=ja`;
+    s.onerror = () => { mapsApiPromise = null; reject(new Error('Maps API load failed')); };
+    document.head.appendChild(s);
+  });
+  return mapsApiPromise;
+}
 
 // ─── iOS Frame ───────────────────────────────────────────
 function IOSStatusBar({ dark = false, time = '9:41' }) {
@@ -391,6 +407,84 @@ function MapView({ pins = [], route = [], highlight, dark = false, height = 280 
   );
 }
 
+// ─── Google Map View ─────────────────────────────────────
+function GoogleMapView({ pins = [], route = [], highlight, height = 280, accentColor = '#3B5BA5' }) {
+  const mapRef = useRef(null);
+  const instanceRef = useRef(null);
+  const [ready, setReady] = useState(!!window.google?.maps);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    if (!GOOGLE_KEY) return;
+    loadMapsApi().then(() => setReady(true)).catch(() => setErr('Maps APIの読み込みに失敗しました'));
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    const validPins = pins.filter(p => p.lat && p.lng);
+    if (validPins.length === 0) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    validPins.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+    const center = { lat: bounds.getCenter().lat(), lng: bounds.getCenter().lng() };
+
+    const map = new google.maps.Map(mapRef.current, {
+      center,
+      zoom: 13,
+      disableDefaultUI: true,
+      zoomControl: true,
+      gestureHandling: 'greedy',
+      styles: [{ featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }],
+    });
+    instanceRef.current = map;
+
+    validPins.forEach((pin, i) => {
+      const isHi = highlight === pin.id;
+      new google.maps.Marker({
+        position: { lat: pin.lat, lng: pin.lng },
+        map,
+        label: { text: String(i + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: isHi ? 15 : 11,
+          fillColor: isHi ? '#141414' : accentColor,
+          fillOpacity: 1,
+          strokeColor: 'white',
+          strokeWeight: 2,
+        },
+        title: pin.label,
+        zIndex: isHi ? 100 : i,
+      });
+    });
+
+    if (validPins.length > 1) {
+      new google.maps.Polyline({
+        path: validPins.map(p => ({ lat: p.lat, lng: p.lng })),
+        strokeColor: accentColor,
+        strokeOpacity: 0.75,
+        strokeWeight: 3,
+        geodesic: true,
+        map,
+      });
+      map.fitBounds(bounds, 50);
+    }
+  }, [ready, JSON.stringify(pins), highlight]);
+
+  if (!GOOGLE_KEY) return <MapView pins={pins} route={route} highlight={highlight} height={height}/>;
+  if (err) return (
+    <div style={{ width: '100%', height, background: '#f5f2ec', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14 }}>
+      <div style={{ fontSize: 12, color: '#7a7a7a' }}>{err}</div>
+      <MapView pins={pins} route={route} highlight={highlight} height={height - 40}/>
+    </div>
+  );
+  if (!ready) return (
+    <div style={{ width: '100%', height, background: '#f5f2ec', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+      <div style={{ fontSize: 12, color: '#a5a5a5' }}>地図を読み込み中...</div>
+    </div>
+  );
+  return <div ref={mapRef} style={{ width: '100%', height }}/>;
+}
+
 // ─── Timeline ────────────────────────────────────────────
 function minToReadable(m) {
   if (m < 60) return `${m}分`;
@@ -404,6 +498,66 @@ function ModeIcon({ mode, size = 12 }) {
   if (mode === 'バス') return <svg width={size} height={size} viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="9" rx="1.5" fill="none" stroke={c} strokeWidth="1.2"/><rect x="3.5" y="4.5" width="9" height="3" fill={c} opacity="0.4"/><circle cx="5" cy="12.5" r="1" fill={c}/><circle cx="11" cy="12.5" r="1" fill={c}/></svg>;
   if (mode === '車' || mode === 'タクシー') return <svg width={size} height={size} viewBox="0 0 16 16"><path d="M2 10 L3 6 L13 6 L14 10 L14 12 L2 12 Z" fill="none" stroke={c} strokeWidth="1.2"/><circle cx="4.5" cy="12" r="1" fill={c}/><circle cx="11.5" cy="12" r="1" fill={c}/></svg>;
   return <span style={{ fontSize: 10, color: c }}>•</span>;
+}
+
+function TransitTimeButton({ item, dayDate }) {
+  const [info, setInfo] = useState(null); // null | 'loading' | { text, arr } | 'error'
+  const isTransit = item.mode === '電車' || item.mode === '新幹線' || item.mode === 'バス';
+  if (!isTransit || (!item.from && !item.to)) return null;
+
+  const openMaps = () => {
+    const from = encodeURIComponent(item.from || '');
+    const to = encodeURIComponent(item.to || '');
+    window.open(`https://www.google.com/maps/dir/?api=1&origin=${from}&destination=${to}&travelmode=transit`, '_blank');
+  };
+
+  const lookupTransit = async () => {
+    if (!GOOGLE_KEY || !window.google?.maps) { openMaps(); return; }
+    setInfo('loading');
+    try {
+      // Parse departure time from dayDate (e.g. "05.02 (土)") + item time "10:30"
+      const year = new Date().getFullYear();
+      const [m, d] = (dayDate || '01.01').split(' ')[0].split('.').map(Number);
+      const [hh, mm] = (item.t || '09:00').split(':').map(Number);
+      const dep = new Date(year, m - 1, d, hh, mm, 0);
+
+      const ds = new google.maps.DirectionsService();
+      ds.route({
+        origin: item.from,
+        destination: item.to,
+        travelMode: google.maps.TravelMode.TRANSIT,
+        transitOptions: { departureTime: dep },
+      }, (result, status) => {
+        if (status === 'OK') {
+          const leg = result.routes[0]?.legs[0];
+          if (leg) {
+            setInfo({
+              text: leg.departure_time?.text || item.t,
+              arr: leg.arrival_time?.text || '',
+              dur: leg.duration?.text || '',
+            });
+          } else { setInfo('error'); }
+        } else { setInfo('error'); }
+      });
+    } catch { setInfo('error'); }
+  };
+
+  if (info === 'loading') return <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', marginTop: 4 }}>検索中...</div>;
+  if (info && info !== 'error') return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+      <div style={{ fontSize: 11, background: '#eef2f8', borderRadius: 6, padding: '3px 8px', color: '#3B5BA5', fontWeight: 600 }}>
+        {info.text}{info.arr ? ` → ${info.arr}` : ''}{info.dur ? ` (${info.dur})` : ''}
+      </div>
+      <button onClick={openMaps} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 10, color: '#a5a5a5', padding: 0, fontFamily: 'inherit' }}>地図▸</button>
+    </div>
+  );
+
+  return (
+    <button onClick={lookupTransit} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#a5a5a5" strokeWidth="2"/><path d="M12 6v6l4 2" stroke="#a5a5a5" strokeWidth="2" strokeLinecap="round"/></svg>
+      <span style={{ fontSize: 10, color: '#a5a5a5' }}>実際の時刻を確認</span>
+    </button>
+  );
 }
 
 function TimelineDay({ day, onSpotTap, activeSpot }) {
@@ -431,6 +585,7 @@ function TimelineDay({ day, onSpotTap, activeSpot }) {
               </div>
               {it.note && <div style={{ fontSize: 12, color: '#7a7a7a', marginTop: 4, lineHeight: 1.5 }}>{it.note}</div>}
               {!isMove && it.dur > 0 && <div className="mono" style={{ fontSize: 11, color: '#a5a5a5', marginTop: 4 }}>滞在 {minToReadable(it.dur)}</div>}
+              {isMove && <TransitTimeButton item={it} dayDate={day.date}/>}
             </div>
           </div>
         );
@@ -693,10 +848,20 @@ function DetailScreen({ plan, onBack, onShare, onAIChat, onPlanChange }) {
   const day = plan.days[activeDay];
 
   const pinsForDay = useMemo(() => {
-    return day.items.filter(it => it.spot && MAP_PINS[it.spot]).map((it, i) => ({ id: it.spot, ...MAP_PINS[it.spot], n: i + 1 }));
-  }, [activeDay, plan.id]);
+    const pins = [];
+    let n = 1;
+    day.items.forEach(it => {
+      if (it.type !== 'stay') return;
+      if (it.spot && MAP_PINS[it.spot]) {
+        pins.push({ id: it.spot, ...MAP_PINS[it.spot], n: n++ });
+      } else if (it.spot_lat && it.spot_lng) {
+        pins.push({ id: `pin_${n}`, lat: it.spot_lat, lng: it.spot_lng, x: 0.5, y: 0.5, label: it.title, n: n++ });
+      }
+    });
+    return pins;
+  }, [day]);
 
-  const routeForDay = pinsForDay.map(p => ({ x: p.x, y: p.y }));
+  const routeForDay = pinsForDay.map(p => ({ x: p.x, y: p.y, lat: p.lat, lng: p.lng }));
 
   return (
     <div className="screen fade-in">
@@ -705,7 +870,6 @@ function DetailScreen({ plan, onBack, onShare, onAIChat, onPlanChange }) {
           <button onClick={onBack} style={{ border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
           </button>
-          <div className="mono" style={{ fontSize: 10, opacity: 0.8, letterSpacing: '0.08em' }}>石川 · 3泊4日 · AIが3案ご提案</div>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 14, overflowX: 'auto', paddingBottom: 2 }}>
           {PLANS.map(p => {
@@ -724,9 +888,7 @@ function DetailScreen({ plan, onBack, onShare, onAIChat, onPlanChange }) {
         </div>
         <div style={{ display: 'flex', gap: 20, marginTop: 16, fontSize: 11 }}>
           <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{plan.meta.spots}</div><div style={{ opacity: 0.7, marginTop: 1 }}>スポット</div></div>
-          <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{plan.meta.cost}</div><div style={{ opacity: 0.7, marginTop: 1 }}>概算/人</div></div>
           <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{plan.meta.walk}</div><div style={{ opacity: 0.7, marginTop: 1 }}>歩行</div></div>
-          <div><div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>★{plan.meta.rating}</div><div style={{ opacity: 0.7, marginTop: 1 }}>AI評価</div></div>
         </div>
       </div>
 
@@ -749,7 +911,7 @@ function DetailScreen({ plan, onBack, onShare, onAIChat, onPlanChange }) {
         {viewMode === 'map' ? (
           <>
             <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid #e8e4dc', marginBottom: 14 }}>
-              <MapView pins={pinsForDay} route={routeForDay} highlight={activeSpot} height={280}/>
+              <GoogleMapView pins={pinsForDay} route={routeForDay} highlight={activeSpot} height={280} accentColor={plan.accent}/>
             </div>
             <div style={{ fontSize: 12, color: '#7a7a7a', marginBottom: 10 }}>{day.label} の順路（{pinsForDay.length}スポット）</div>
             {pinsForDay.map((p, i) => (
@@ -823,7 +985,7 @@ function AIChat({ onClose, plan, onApply }) {
     setThinking(true);
     try {
       const reply = await callGemini(text);
-      setMessages(m => [...m, { role: 'ai', text: reply.message, change: reply.change || null }]);
+      setMessages(m => [...m, { role: 'ai', text: reply.message, change: reply.change || null, userRequest: text }]);
     } catch (e) {
       setMessages(m => [...m, { role: 'ai', text: `エラーが発生しました: ${e.message}` }]);
     } finally {
@@ -860,7 +1022,7 @@ function AIChat({ onClose, plan, onApply }) {
                   <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'white', border: '1px solid #e8e4dc', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3B5BA5', flexShrink: 0 }}/>
                     <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: '#141414' }}>{m.change}</div>
-                    <button onClick={() => onApply?.(m.change)} style={{ border: 'none', background: '#141414', color: 'white', padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>適用</button>
+                    <button onClick={() => onApply?.(m.change, m.userRequest)} style={{ border: 'none', background: '#141414', color: 'white', padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>反映</button>
                   </div>
                 )}
               </div>
@@ -893,76 +1055,105 @@ function AIChat({ onClose, plan, onApply }) {
 
 // ─── Share Screen ─────────────────────────────────────────
 function ShareScreen({ plan, onBack, onDone }) {
-  const [selected, setSelected] = useState([]);
-  const [sent, setSent] = useState(false);
-  const [message, setMessage] = useState(`${plan.title}で石川旅行どう？\n5/2〜5/5の3泊4日、AI設計プラン。`);
-  const contacts = [
-    { id: 'c1', name: '田中 ゆい', sub: '昨日' },
-    { id: 'c2', name: '佐藤 けんた', sub: '2日前' },
-    { id: 'c3', name: '旅行グループ（4）', sub: '先週', group: true },
-    { id: 'c4', name: 'みさき', sub: '先週' },
-    { id: 'c5', name: '母', sub: '2週間前' },
-  ];
-  const toggle = (id) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const colors = ['#B6876A', '#3D6B5A', '#A34B3B', '#3B5BA5', '#7a7a7a'];
+  const [status, setStatus] = useState('idle'); // idle | copying | success | error
+  const cardRef = useRef();
 
-  if (sent) return (
+  const copyImage = async () => {
+    setStatus('copying');
+    try {
+      const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      if (navigator.clipboard?.write) {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      } else {
+        const link = document.createElement('a');
+        link.download = `${plan.title}-旅行プラン.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+      }
+      setStatus('success');
+    } catch(e) {
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 2500);
+    }
+  };
+
+  if (status === 'success') return (
     <div className="screen fade-in" style={{ background: '#faf8f4', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', padding: 30 }}>
         <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#141414', margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
-        <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>送信しました</div>
-        <div style={{ fontSize: 13, color: '#7a7a7a', marginTop: 8 }}>{selected.length}件のLINEトークに共有</div>
+        <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>コピーしました</div>
+        <div style={{ fontSize: 13, color: '#7a7a7a', marginTop: 8 }}>プラン画像をクリップボードにコピーしました</div>
         <button onClick={onDone} style={{ marginTop: 28, padding: '12px 24px', border: '1px solid #141414', background: 'white', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>プランに戻る</button>
       </div>
     </div>
   );
 
   return (
-    <div className="screen fade-in" style={{ background: 'white' }}>
-      <div style={{ padding: '52px 16px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #efede8' }}>
+    <div className="screen fade-in" style={{ background: '#faf8f4' }}>
+      <div style={{ padding: '52px 16px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #efede8', background: 'white' }}>
         <button onClick={onBack} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#141414" strokeWidth="2.2" strokeLinecap="round"/></svg>
         </button>
         <div>
-          <div className="serif" style={{ fontSize: 18, fontWeight: 500 }}>LINEで共有</div>
-          <div style={{ fontSize: 11, color: '#7a7a7a' }}>相手を選んで送信</div>
+          <div className="serif" style={{ fontSize: 18, fontWeight: 500 }}>プランを共有</div>
+          <div style={{ fontSize: 11, color: '#7a7a7a' }}>画像をクリップボードにコピー</div>
         </div>
       </div>
-      <div style={{ padding: '16px 16px 8px' }}>
-        <div style={{ border: '1px solid #e8e4dc', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ height: 6, background: plan.accent }}/>
-          <div style={{ padding: 12 }}>
-            <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', letterSpacing: '0.08em' }}>TRIPCRAFT · 共有プラン</div>
-            <div className="serif" style={{ fontSize: 17, fontWeight: 500, marginTop: 4 }}>{plan.title}</div>
-            <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3 }}>石川 · 3泊4日 · {plan.meta.spots}スポット · {plan.meta.cost}/人</div>
-            <div style={{ fontSize: 11, color: '#3B5BA5', marginTop: 6, fontWeight: 600 }}>tripcraft.app/p/{plan.id}a3k</div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 120px' }}>
+        <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 12, textAlign: 'center' }}>この画像がコピーされます</div>
+        <div ref={cardRef} style={{ background: 'white', borderRadius: 16, overflow: 'hidden', border: '1px solid #e8e4dc' }}>
+          <div style={{ height: 8, background: plan.accent }}/>
+          <div style={{ padding: 20 }}>
+            <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', letterSpacing: '0.08em', marginBottom: 8 }}>TRIPCRAFT · 旅行プラン</div>
+            <div className="serif" style={{ fontSize: 22, fontWeight: 500, lineHeight: 1.25, marginBottom: 4 }}>{plan.title}</div>
+            <div style={{ fontSize: 13, color: '#7a7a7a', marginBottom: 16 }}>{plan.tagline}</div>
+            <div style={{ display: 'flex', gap: 20, marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 10, color: '#a5a5a5' }}>スポット数</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{plan.meta.spots}箇所</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: '#a5a5a5' }}>歩行距離</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{plan.meta.walk}</div>
+              </div>
+              {plan.days?.[0]?.date && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#a5a5a5' }}>出発日</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{plan.days[0].date}</div>
+                </div>
+              )}
+            </div>
+            {plan.highlights?.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, color: '#a5a5a5', marginBottom: 6 }}>ハイライト</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {plan.highlights.map((h, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: '#f5f2ec', color: '#3a3a3a' }}>{h}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ paddingTop: 12, borderTop: '1px solid #efede8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="mono" style={{ fontSize: 10, color: '#a5a5a5' }}>by TripCraft AI</div>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: plan.accent }}/>
+            </div>
           </div>
         </div>
-        <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 10, border: '1px solid #e8e4dc', fontFamily: 'inherit', fontSize: 12, resize: 'none', outline: 'none', boxSizing: 'border-box' }}/>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 100px' }}>
-        <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', padding: '8px 4px', letterSpacing: '0.08em' }}>最近のトーク</div>
-        {contacts.map((c, idx) => {
-          const on = selected.includes(c.id);
-          return (
-            <div key={c.id} onClick={() => toggle(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', cursor: 'pointer' }}>
-              <div style={{ width: 40, height: 40, borderRadius: c.group ? 8 : '50%', background: colors[idx % 5], color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{c.name.charAt(0)}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: '#a5a5a5', marginTop: 1 }}>{c.sub}</div>
-              </div>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', border: on ? 'none' : '1.5px solid #d5d1c8', background: on ? '#141414' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {on && <svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.8" fill="none"/></svg>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 38px', background: 'white', borderTop: '1px solid #efede8' }}>
-        <button disabled={selected.length === 0} onClick={() => setSent(true)} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: selected.length ? '#141414' : '#d5d1c8', color: 'white', fontSize: 14, fontWeight: 600, cursor: selected.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
-          {selected.length ? `${selected.length}件に送信` : '相手を選択'}
+        {status === 'error' && <div style={{ fontSize: 12, color: '#a34b3b', marginBottom: 8, textAlign: 'center' }}>コピーに失敗しました。ブラウザの許可を確認してください。</div>}
+        <button onClick={copyImage} disabled={status === 'copying'} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: status === 'copying' ? '#d5d1c8' : '#141414', color: 'white', fontSize: 14, fontWeight: 600, cursor: status === 'copying' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {status === 'copying' ? '処理中...' : (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="white" strokeWidth="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="white" strokeWidth="2"/></svg>
+              画像をクリップボードにコピー
+            </>
+          )}
         </button>
       </div>
     </div>
@@ -971,36 +1162,55 @@ function ShareScreen({ plan, onBack, onDone }) {
 
 // ─── API Key Screen ───────────────────────────────────────
 function ApiKeyScreen({ onSave }) {
-  const [key, setKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [googleKey, setGoogleKey] = useState(() => localStorage.getItem('google_maps_api_key') || '');
   const save = () => {
-    const k = key.trim();
-    if (!k) return;
-    localStorage.setItem('gemini_api_key', k);
-    GEMINI_KEY = k;
-    onSave(k);
+    const gk = geminiKey.trim();
+    if (!gk) return;
+    localStorage.setItem('gemini_api_key', gk);
+    GEMINI_KEY = gk;
+    if (googleKey.trim()) {
+      localStorage.setItem('google_maps_api_key', googleKey.trim());
+      GOOGLE_KEY = googleKey.trim();
+    }
+    onSave(gk);
   };
   return (
     <div className="screen fade-in" style={{ background: '#faf8f4', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>Gemini APIキーを設定</div>
+          <div className="serif" style={{ fontSize: 22, fontWeight: 500 }}>APIキーを設定</div>
           <div style={{ fontSize: 13, color: '#7a7a7a', marginTop: 10, lineHeight: 1.7 }}>
-            Google AI Studioで発行したAPIキーを入力してください。<br/>キーはこのブラウザにのみ保存され、外部には送信されません。
+            キーはこのブラウザにのみ保存され、外部には送信されません。
           </div>
         </div>
+
+        <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 6, fontWeight: 600 }}>Gemini APIキー（必須）</div>
         <input
-          value={key}
-          onChange={e => setKey(e.target.value)}
+          value={geminiKey}
+          onChange={e => setGeminiKey(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && save()}
-          placeholder="AIzaSy..."
+          placeholder=""
           style={{ width: '100%', border: '1px solid #e8e4dc', borderRadius: 12, padding: '14px 16px', fontSize: 13, fontFamily: 'JetBrains Mono, monospace', outline: 'none', background: 'white', boxSizing: 'border-box' }}
         />
-        <button onClick={save} disabled={!key.trim()} style={{ width: '100%', marginTop: 10, padding: '16px', borderRadius: 14, border: 'none', background: key.trim() ? '#141414' : '#d5d1c8', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'inherit', cursor: key.trim() ? 'pointer' : 'not-allowed' }}>
+        <div style={{ fontSize: 11, color: '#a5a5a5', marginTop: 4, marginBottom: 16 }}>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: '#3B5BA5' }}>Google AI Studio</a> で取得
+        </div>
+
+        <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 6, fontWeight: 600 }}>Google Maps APIキー（任意・地図表示に必要）</div>
+        <input
+          value={googleKey}
+          onChange={e => setGoogleKey(e.target.value)}
+          placeholder=""
+          style={{ width: '100%', border: '1px solid #e8e4dc', borderRadius: 12, padding: '14px 16px', fontSize: 13, fontFamily: 'JetBrains Mono, monospace', outline: 'none', background: 'white', boxSizing: 'border-box' }}
+        />
+        <div style={{ fontSize: 11, color: '#a5a5a5', marginTop: 4, marginBottom: 20, lineHeight: 1.6 }}>
+          <a href="https://console.cloud.google.com/apis/library/maps-backend.googleapis.com" target="_blank" rel="noopener noreferrer" style={{ color: '#3B5BA5' }}>Google Cloud Console</a> で Maps JavaScript API と Directions API を有効化して取得
+        </div>
+
+        <button onClick={save} disabled={!geminiKey.trim()} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: geminiKey.trim() ? '#141414' : '#d5d1c8', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'inherit', cursor: geminiKey.trim() ? 'pointer' : 'not-allowed' }}>
           保存して始める
         </button>
-        <div style={{ fontSize: 11, color: '#a5a5a5', marginTop: 12, textAlign: 'center', lineHeight: 1.7 }}>
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: '#3B5BA5' }}>Google AI Studio</a> でAPIキーを取得できます
-        </div>
       </div>
     </div>
   );
@@ -1039,11 +1249,13 @@ async function generatePlansWithGemini(tripState) {
 宿泊: ${hotelText}
 
 形式(JSON配列3要素):
-[{"id":"p1","title":"タイトル10字以内","tagline":"25字以内","accent":"#3B5BA5","meta":{"walk":"X.Xkm","cost":"¥XX,XXX","spots":数字,"rating":4.5},"highlights":["A","B","C"],"days":[{"label":"Day 1","date":"${dayDates[0]||''}","sub":"テーマ","items":[{"t":"09:00","type":"stay","title":"名称","dur":90,"note":"メモ"},{"t":"10:30","type":"move","title":"移動","dur":20,"mode":"電車"}]}]},{"id":"p2","accent":"#A34B3B",...},{"id":"p3","accent":"#3D6B5A",...}]
+[{"id":"p1","title":"タイトル10字以内","tagline":"25字以内","accent":"#3B5BA5","meta":{"walk":"X.Xkm","cost":"¥XX,XXX","spots":数字,"rating":4.5},"highlights":["A","B","C"],"days":[{"label":"Day 1","date":"${dayDates[0]||''}","sub":"テーマ","items":[{"t":"09:00","type":"stay","title":"名称","dur":90,"note":"メモ","spot_lat":35.1234,"spot_lng":136.5678},{"t":"10:30","type":"move","title":"移動","dur":20,"mode":"電車","from":"出発駅名","to":"到着駅名"}]}]},{"id":"p2","accent":"#A34B3B",...},{"id":"p3","accent":"#3D6B5A",...}]
 
 ルール:
 - type="stay"(観光・食事)またはtype="move"(移動)のみ
 - moveにはmode必須("電車"/"新幹線"/"バス"/"徒歩"/"車"/"タクシー")
+- 電車・新幹線・バスのmoveにはfrom(出発地点名)とto(到着地点名)を必ず付ける
+- stayには実際のspot_lat・spot_lngを付ける（Google Maps表示用）
 - durは分の整数、移動時間は実際の所要時間を基準に
 - 日付: ${dayDateHint||'適切に設定'}
 - JSONのみ、前後余分な文字禁止`;
@@ -1075,6 +1287,8 @@ function App() {
   const [apiKey, setApiKey] = useState(() => {
     const k = localStorage.getItem('gemini_api_key') || '';
     GEMINI_KEY = k;
+    const gk = localStorage.getItem('google_maps_api_key') || '';
+    GOOGLE_KEY = gk;
     return k;
   });
   const [screen, setScreen] = useState('home');
@@ -1089,6 +1303,42 @@ function App() {
   });
 
   const go = (target, plan) => { if (plan) setSelectedPlan(plan); setScreen(target); };
+
+  const handleApply = async (changeTitle, userRequest) => {
+    setShowAI(false);
+    if (!userRequest) return;
+    setGenerating(true);
+    try {
+      const current = selectedPlan || PLANS[0];
+      const prompt = `旅行プランを以下の要望に合わせて更新してください。
+
+要望: ${userRequest}
+
+現在のプラン（JSON）:
+${JSON.stringify(current)}
+
+同じJSON構造（id・title・tagline・accent・meta・highlights・daysをすべて含む）で更新されたプランを1つだけ返してください。idは保持すること。JSONのみ、コードブロックなし。`;
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 16384 },
+          }),
+        }
+      );
+      const data = await res.json();
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const updated = JSON.parse(clean);
+      window.PLANS = window.PLANS.map(p => p.id === updated.id ? updated : p);
+      setSelectedPlan({ ...updated });
+    } catch(e) { /* ignore */ } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!tripState.destination.trim()) { setGenError('行き先を入力してください'); return; }
@@ -1123,7 +1373,7 @@ function App() {
   return (
     <div className="stage">
       {renderScreen()}
-      {showAI && <AIChat onClose={() => setShowAI(false)} plan={selectedPlan || PLANS[0]} onApply={() => setShowAI(false)}/>}
+      {showAI && <AIChat onClose={() => setShowAI(false)} plan={selectedPlan || PLANS[0]} onApply={handleApply}/>}
       {generating && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(250,248,244,0.96)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
           <div style={{ width: 40, height: 40, border: '3px solid #e8e4dc', borderTop: '3px solid #3B5BA5', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
