@@ -1219,25 +1219,48 @@ function ApiKeyScreen({ onSave }) {
 }
 
 // ─── Gemini API helper (with retry) ──────────────────────
-async function geminiRequest(body, maxRetries = 3) {
+async function geminiRequest(body) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
-  let lastErr;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+
+  const doFetch = () => fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  // エラーメッセージから "retry in Xs" の待機秒数を抽出
+  const parseRetryAfterMs = (msg) => {
+    const m = msg.match(/retry in (\d+(?:\.\d+)?)\s*s/i);
+    return m ? Math.ceil(parseFloat(m[1]) * 1000) : null;
+  };
+
+  // 一時的エラー（高負荷・サービス不可）: 最大3回、1.5s/3s/4.5s バックオフ
+  for (let i = 0; i < 3; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 1500 * i));
+    const res = await doFetch();
     if (res.ok) return await res.json();
     const errData = await res.json().catch(() => ({}));
     const msg = errData?.error?.message || `Gemini API ${res.status}`;
-    const retryable = res.status === 429 || res.status === 503 || res.status === 500
+    const transient = res.status === 503 || res.status === 500
       || msg.toLowerCase().includes('demand') || msg.toLowerCase().includes('overload') || msg.toLowerCase().includes('unavailable');
-    lastErr = new Error(msg);
-    if (!retryable || attempt === maxRetries - 1) throw lastErr;
+    if (!transient) {
+      // レートリミット/クォータ: エラー文に含まれる待機時間でリトライ
+      if (res.status === 429) {
+        const waitMs = parseRetryAfterMs(msg);
+        if (waitMs && waitMs <= 90_000) {
+          await new Promise(r => setTimeout(r, waitMs + 500));
+          const res2 = await doFetch();
+          if (res2.ok) return await res2.json();
+          const err2 = await res2.json().catch(() => ({}));
+          throw new Error(err2?.error?.message || `Gemini API ${res2.status}`);
+        }
+        // 90秒超 or 日次クォータ → 即失敗（無限待ちを防ぐ）
+        throw new Error(msg);
+      }
+      throw new Error(msg);
+    }
+    if (i === 2) throw new Error(msg);
   }
-  throw lastErr;
 }
 
 // ─── Plan Generation ─────────────────────────────────────
