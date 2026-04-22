@@ -249,17 +249,17 @@ window.PLANS = [
 ];
 
 window.MAP_PINS = {
-  s1: { x: 0.52, y: 0.58, lat: 36.5617, lng: 136.6621, label: '兼六園' },
-  s2: { x: 0.53, y: 0.61, lat: 36.5566, lng: 136.6564, label: '21世紀美術館' },
-  s3: { x: 0.56, y: 0.51, lat: 36.5726, lng: 136.6648, label: 'ひがし茶屋街' },
-  s4: { x: 0.51, y: 0.54, lat: 36.5694, lng: 136.6553, label: '近江町市場' },
-  s5: { x: 0.38, y: 0.32, lat: 36.7342, lng: 136.6447, label: '千里浜' },
-  s6: { x: 0.62, y: 0.12, lat: 37.3901, lng: 136.9005, label: '輪島朝市' },
-  s7: { x: 0.66, y: 0.14, lat: 37.3734, lng: 136.9246, label: '白米千枚田' },
-  s8: { x: 0.50, y: 0.60, lat: 36.5591, lng: 136.6498, label: '妙立寺' },
-  hotel1: { x: 0.53, y: 0.58, lat: 36.5617, lng: 136.6621, label: '金沢の宿' },
-  hotel2: { x: 0.63, y: 0.15, lat: 37.3901, lng: 136.9005, label: '能登の宿' },
-  airport: { x: 0.30, y: 0.70, lat: 36.3944, lng: 136.4069, label: '小松空港' },
+  s1: { x: 0.30, y: 0.86, lat: 36.5617, lng: 136.6621, label: '兼六園' },
+  s2: { x: 0.29, y: 0.87, lat: 36.5566, lng: 136.6564, label: '21世紀美術館' },
+  s3: { x: 0.31, y: 0.84, lat: 36.5726, lng: 136.6648, label: 'ひがし茶屋街' },
+  s4: { x: 0.28, y: 0.86, lat: 36.5694, lng: 136.6553, label: '近江町市場' },
+  s5: { x: 0.34, y: 0.48, lat: 36.7342, lng: 136.6447, label: '千里浜' },
+  s6: { x: 0.58, y: 0.17, lat: 37.3901, lng: 136.9005, label: '輪島朝市' },
+  s7: { x: 0.63, y: 0.19, lat: 37.3734, lng: 136.9246, label: '白米千枚田' },
+  s8: { x: 0.29, y: 0.87, lat: 36.5591, lng: 136.6498, label: '妙立寺' },
+  hotel1: { x: 0.30, y: 0.86, lat: 36.5617, lng: 136.6621, label: '金沢の宿' },
+  hotel2: { x: 0.58, y: 0.18, lat: 37.3901, lng: 136.9005, label: '能登の宿' },
+  airport: { x: 0.20, y: 0.91, lat: 36.3944, lng: 136.4069, label: '小松空港' },
 };
 </script>
 
@@ -621,9 +621,9 @@ function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
   const [spotInput, setSpotInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSugg, setLoadingSugg] = useState(false);
+  const STATIC_SUGGESTIONS = ['兼六園', '金沢21世紀美術館', 'ひがし茶屋街', '近江町市場', '千里浜なぎさドライブウェイ', '輪島朝市', '白米千枚田', '妙立寺（忍者寺）'];
   const addSpot = (name) => {
     if (!name.trim()) return;
-    if (state.spots.find(s => s.name === name)) return;
     setState({ ...state, spots: [...state.spots, { id: 'c' + Date.now(), name, cat: '選択中' }] });
     setSpotInput('');
   };
@@ -651,6 +651,12 @@ function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
       setLoadingSugg(false);
     }
   };
+
+  useEffect(() => {
+    if (state.destination.trim() && GEMINI_KEY) fetchSuggestions();
+  }, [state.destination]);
+
+  const displaySuggestions = suggestions.length > 0 ? suggestions : STATIC_SUGGESTIONS;
 
   return (
     <div className="screen fade-in" style={{ background: '#faf8f4' }}>
@@ -702,8 +708,8 @@ function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
         </div>
 
         <div style={{ marginTop: 28, marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#141414' }}>行きたいスポット</div>
-          <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3 }}>ざっくりでOK。AIが順番と時間を最適化します</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#141414' }}>行きたいスポット・要望</div>
+          <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3 }}>スポット名でも「11:00に○○に駐車したい」などの要望でもOK</div>
         </div>
 
         {state.spots.length > 0 && (
@@ -733,7 +739,7 @@ function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
 
         <div style={{ display: 'flex', gap: 8, background: 'white', borderRadius: 12, border: '1px solid #e8e4dc', padding: '4px 4px 4px 14px', alignItems: 'center' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#a5a5a5" strokeWidth="2"/><path d="M16 16l4 4" stroke="#a5a5a5" strokeWidth="2" strokeLinecap="round"/></svg>
-          <input value={spotInput} onChange={e => setSpotInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSpot(spotInput)} placeholder="スポット名を入力..." style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 6px', fontSize: 14, fontFamily: 'inherit', background: 'transparent' }}/>
+          <input value={spotInput} onChange={e => setSpotInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSpot(spotInput)} placeholder="スポット名・要望を入力..." style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 6px', fontSize: 14, fontFamily: 'inherit', background: 'transparent' }}/>
           <button onClick={() => addSpot(spotInput)} style={{ border: 'none', background: '#141414', color: 'white', width: 34, height: 34, borderRadius: 8, cursor: 'pointer', fontSize: 16, fontWeight: 500 }}>+</button>
         </div>
 
@@ -749,7 +755,7 @@ function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
             )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {suggestions.filter(n => !state.spots.find(s => s.name === n)).map(name => (
+            {displaySuggestions.filter(n => !state.spots.find(s => s.name === n)).map(name => (
               <button key={name} onClick={() => addSpot(name)} className="chip" style={{ cursor: 'pointer', fontFamily: 'inherit' }}>+ {name}</button>
             ))}
           </div>
