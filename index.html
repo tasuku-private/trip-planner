@@ -1294,7 +1294,6 @@ async function geminiRequest(body) {
     body: JSON.stringify(body),
   });
 
-  // エラーメッセージから "retry in Xs" の待機秒数を抽出
   const parseRetryAfterMs = (msg) => {
     const m = msg.match(/retry in (\d+(?:\.\d+)?)\s*s/i);
     return m ? Math.ceil(parseFloat(m[1]) * 1000) : null;
@@ -1310,18 +1309,11 @@ async function geminiRequest(body) {
     const transient = res.status === 503 || res.status === 500
       || msg.toLowerCase().includes('demand') || msg.toLowerCase().includes('overload') || msg.toLowerCase().includes('unavailable');
     if (!transient) {
-      // レートリミット/クォータ: エラー文に含まれる待機時間でリトライ
+      // 429: カウントダウン付きリトライを呼び出し元に委ねる（黙って待機しない）
       if (res.status === 429) {
-        const waitMs = parseRetryAfterMs(msg);
-        if (waitMs && waitMs <= 90_000) {
-          await new Promise(r => setTimeout(r, waitMs + 500));
-          const res2 = await doFetch();
-          if (res2.ok) return await res2.json();
-          const err2 = await res2.json().catch(() => ({}));
-          throw new Error(err2?.error?.message || `Gemini API ${res2.status}`);
-        }
-        // 90秒超 or 日次クォータ → 即失敗（無限待ちを防ぐ）
-        throw new Error(msg);
+        const err = new Error(msg);
+        err.retryAfterMs = parseRetryAfterMs(msg) ?? null;
+        throw err;
       }
       throw new Error(msg);
     }
@@ -1441,6 +1433,7 @@ ${JSON.stringify(current)}
     if (!tripState.destination.trim()) { setGenError('行き先を入力してください'); return; }
     setGenError('');
     setGenerating(true);
+    let retryMs = null;
     try {
       const plans = await generatePlansWithGemini(tripState);
       if (!Array.isArray(plans) || plans.length === 0) throw new Error('プランの形式が不正です');
@@ -1448,9 +1441,27 @@ ${JSON.stringify(current)}
       setSelectedPlan(plans[0]);
       setScreen('detail');
     } catch(e) {
-      setGenError(`生成失敗: ${e.message}`);
+      if (e.retryAfterMs != null) {
+        retryMs = e.retryAfterMs;
+      } else {
+        const msg = e.message;
+        setGenError(
+          (msg.includes('quota') || msg.includes('Quota'))
+            ? 'APIの使用上限に達しました。プランや課金情報をご確認ください。'
+            : `生成失敗: ${msg}`
+        );
+      }
     } finally {
       setGenerating(false);
+    }
+    // 429レート制限: カウントダウン表示→自動リトライ（finally後に実行）
+    if (retryMs != null) {
+      for (let t = Math.ceil(retryMs / 1000); t > 0; t--) {
+        setGenError(`APIレート制限中。${t}秒後に自動リトライします...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      setGenError('');
+      handleGenerate();
     }
   };
 
