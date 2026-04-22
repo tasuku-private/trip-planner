@@ -1450,7 +1450,7 @@ ${JSON.stringify(current)}
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (attempt = 0) => {
     if (!tripState.destination.trim()) { setGenError('行き先を入力してください'); return; }
     setGenError('');
     setGenerating(true);
@@ -1462,7 +1462,7 @@ ${JSON.stringify(current)}
       setSelectedPlan(plans[0]);
       setScreen('detail');
     } catch(e) {
-      if (e.retryAfterMs != null) {
+      if (e.retryAfterMs != null && attempt < 3) {
         retryMs = e.retryAfterMs;
       } else {
         const msg = e.message;
@@ -1475,14 +1475,13 @@ ${JSON.stringify(current)}
     } finally {
       setGenerating(false);
     }
-    // 429レート制限: カウントダウン表示→自動リトライ（finally後に実行）
     if (retryMs != null) {
       for (let t = Math.ceil(retryMs / 1000); t > 0; t--) {
-        setGenError(`APIレート制限中。${t}秒後に自動リトライします...`);
+        setGenError(`APIレート制限中。${t}秒後に自動リトライします... (${attempt + 1}/3)`);
         await new Promise(r => setTimeout(r, 1000));
       }
       setGenError('');
-      handleGenerate();
+      handleGenerate(attempt + 1);
     }
   };
 
