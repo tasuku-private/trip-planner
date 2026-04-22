@@ -753,7 +753,6 @@ function HomeScreen({ onGenerate, state, setState, error, onResetKey }) {
 
         <div style={{ marginTop: 28, marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#141414' }}>行きたいスポット・要望</div>
-          <div style={{ fontSize: 11, color: '#7a7a7a', marginTop: 3 }}>スポット名でも「11:00に○○に駐車したい」などの要望でもOK</div>
         </div>
 
         {state.spots.length > 0 && (
@@ -1179,28 +1178,50 @@ function ShareScreen({ plan, onBack, onDone }) {
               <div style={{ fontSize: 11, color: '#3a3a3a' }}><span style={{ color: '#a5a5a5' }}>歩行 </span>{plan.meta.walk}</div>
             </div>
           </div>
-          {/* SVG地図（html2canvas対応） */}
+          {/* SVG地図（html2canvas対応、MAP_PINS＋spot_lat/lngの両方を収集） */}
           {(() => {
             const seen = new Set();
+            let n = 1;
             const pins = plan.days.flatMap(day =>
-              day.items.filter(it => it.spot && MAP_PINS[it.spot] && !seen.has(it.spot) && seen.add(it.spot))
-                .map((it, i) => ({ ...MAP_PINS[it.spot], id: it.spot, n: i + 1 }))
+              day.items.flatMap(it => {
+                if (it.spot && MAP_PINS[it.spot] && !seen.has(it.spot)) {
+                  seen.add(it.spot);
+                  return [{ ...MAP_PINS[it.spot], id: it.spot, n: n++ }];
+                }
+                if (it.spot_lat && it.spot_lng && !seen.has(`${it.spot_lat},${it.spot_lng}`)) {
+                  const key = `${it.spot_lat},${it.spot_lng}`;
+                  seen.add(key);
+                  return [{ lat: it.spot_lat, lng: it.spot_lng, label: it.title, id: key, n: n++ }];
+                }
+                return [];
+              })
             );
-            return pins.length > 0
-              ? <MapView pins={pins} route={pins} height={180}/>
-              : null;
+            return pins.length > 0 ? <MapView pins={pins} route={pins} height={200}/> : null;
           })()}
-          {/* タイムライン */}
+          {/* タイムライン（詳細画面と同等の情報量） */}
           <div style={{ padding: '10px 16px 14px' }}>
             {plan.days.map((day, di) => (
-              <div key={di} style={{ marginBottom: di < plan.days.length - 1 ? 10 : 0 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: plan.accent, marginBottom: 4, letterSpacing: '0.04em' }}>
-                  {day.label} · {day.sub}
+              <div key={di} style={{ marginBottom: di < plan.days.length - 1 ? 14 : 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: plan.accent, marginBottom: 6, letterSpacing: '0.04em' }}>
+                  {day.label}　{day.date}　{day.sub}
                 </div>
-                {day.items.filter(it => it.type === 'stay').map((it, ii) => (
-                  <div key={ii} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', paddingLeft: 4, marginBottom: 3 }}>
-                    <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', flexShrink: 0, paddingTop: 1 }}>{it.t}</div>
-                    <div style={{ fontSize: 11, color: '#141414', lineHeight: 1.4 }}>{it.title}</div>
+                {day.items.map((it, ii) => (
+                  <div key={ii} style={{ display: 'flex', gap: 8, marginBottom: 5, paddingLeft: 2 }}>
+                    <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', flexShrink: 0, paddingTop: 2, width: 38 }}>{it.t}</div>
+                    {it.type === 'move' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <ModeIcon mode={it.mode} size={10}/>
+                        <span style={{ fontSize: 10, color: '#7a7a7a' }}>{it.mode}</span>
+                        {it.from && it.to && <span style={{ fontSize: 10, color: '#a5a5a5' }}>{it.from} → {it.to}</span>}
+                        {it.dur > 0 && <span style={{ fontSize: 10, color: '#c0bdb7' }}>({minToReadable(it.dur)})</span>}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 12, color: '#141414', fontWeight: 500, lineHeight: 1.4 }}>{it.title}</div>
+                        {it.note && <div style={{ fontSize: 10, color: '#7a7a7a', marginTop: 1 }}>{it.note}</div>}
+                        {it.dur > 0 && <div style={{ fontSize: 10, color: '#a5a5a5', marginTop: 1 }}>滞在 {minToReadable(it.dur)}</div>}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
