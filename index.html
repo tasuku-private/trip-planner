@@ -82,6 +82,9 @@ html, body {
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>.leaflet-container { font-family: inherit; } .leaflet-control-attribution { font-size: 8px !important; }</style>
 </head>
 <body>
 <div class="stage-bg"></div>
@@ -424,6 +427,67 @@ function MapView({ pins = [], route = [], highlight, dark = false, height = 280 
   );
 }
 
+// ─── Leaflet Map View (OSM、APIキー不要) ─────────────────
+function LeafletMapView({ pins = [], highlight, height = 280, accentColor = '#3B5BA5' }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const polyRef = useRef(null);
+
+  useEffect(() => {
+    if (!window.L || !containerRef.current) return;
+    if (!mapRef.current) {
+      mapRef.current = L.map(containerRef.current, { zoomControl: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(mapRef.current);
+    }
+    const map = mapRef.current;
+
+    markersRef.current.forEach(m => m.remove());
+    markersRef.current = [];
+    if (polyRef.current) { polyRef.current.remove(); polyRef.current = null; }
+
+    const valid = pins.filter(p => p.lat && p.lng);
+    if (!valid.length) return;
+
+    if (valid.length === 1) {
+      map.setView([valid[0].lat, valid[0].lng], 14);
+    } else {
+      map.fitBounds(L.latLngBounds(valid.map(p => [p.lat, p.lng])), { padding: [28, 28], maxZoom: 14 });
+    }
+
+    valid.forEach((pin, i) => {
+      const isHi = highlight === pin.id;
+      const size = isHi ? 28 : 22;
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${isHi ? '#141414' : accentColor};border:2.5px solid white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;box-shadow:0 2px 6px rgba(0,0,0,0.3);line-height:1">${i + 1}</div>`,
+        iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+      });
+      const marker = L.marker([pin.lat, pin.lng], { icon }).addTo(map);
+      if (pin.label) {
+        marker.bindTooltip(pin.label, { direction: 'top', offset: [0, -size / 2 - 2], permanent: isHi });
+        if (isHi) marker.openTooltip();
+      }
+      markersRef.current.push(marker);
+    });
+
+    if (valid.length > 1) {
+      polyRef.current = L.polyline(valid.map(p => [p.lat, p.lng]), {
+        color: accentColor, weight: 2.5, opacity: 0.7, dashArray: '6 4',
+      }).addTo(map);
+    }
+  }, [pins, highlight, accentColor]);
+
+  useEffect(() => () => {
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+  }, []);
+
+  return <div ref={containerRef} style={{ width: '100%', height }}/>;
+}
+
 // ─── Google Map View ─────────────────────────────────────
 const _geocodeCache = new Map();
 
@@ -509,13 +573,8 @@ function GoogleMapView({ pins = [], route = [], highlight, height = 280, accentC
     });
   }, [ready, JSON.stringify(pins), highlight]);
 
-  if (!GOOGLE_KEY) return <MapView pins={pins} route={route} highlight={highlight} height={height}/>;
-  if (err) return (
-    <div style={{ width: '100%', height, background: '#f5f2ec', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14 }}>
-      <div style={{ fontSize: 12, color: '#7a7a7a' }}>{err}</div>
-      <MapView pins={pins} route={route} highlight={highlight} height={height - 40}/>
-    </div>
-  );
+  if (!GOOGLE_KEY) return <LeafletMapView pins={pins} highlight={highlight} height={height} accentColor={accentColor}/>;
+  if (err) return <LeafletMapView pins={pins} highlight={highlight} height={height} accentColor={accentColor}/>;
   if (!ready) return (
     <div style={{ width: '100%', height, background: '#f5f2ec', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
       <div style={{ fontSize: 12, color: '#a5a5a5' }}>地図を読み込み中...</div>
@@ -1108,40 +1167,47 @@ function ShareScreen({ plan, onBack, onDone }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 120px' }}>
         <div style={{ fontSize: 11, color: '#a5a5a5', marginBottom: 12, textAlign: 'center' }}>この画像がコピーされます</div>
         <div ref={cardRef} style={{ background: 'white', borderRadius: 16, overflow: 'hidden', border: '1px solid #e8e4dc' }}>
-          <div style={{ height: 8, background: plan.accent }}/>
-          <div style={{ padding: 20 }}>
-            <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', letterSpacing: '0.08em', marginBottom: 8 }}>TRIPCRAFT · 旅行プラン</div>
-            <div className="serif" style={{ fontSize: 22, fontWeight: 500, lineHeight: 1.25, marginBottom: 4 }}>{plan.title}</div>
-            <div style={{ fontSize: 13, color: '#7a7a7a', marginBottom: 16 }}>{plan.tagline}</div>
-            <div style={{ display: 'flex', gap: 20, marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 10, color: '#a5a5a5' }}>スポット数</div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{plan.meta.spots}箇所</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: '#a5a5a5' }}>歩行距離</div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{plan.meta.walk}</div>
-              </div>
-              {plan.days?.[0]?.date && (
-                <div>
-                  <div style={{ fontSize: 10, color: '#a5a5a5' }}>出発日</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{plan.days[0].date}</div>
-                </div>
-              )}
+          {/* ヘッダー */}
+          <div style={{ height: 6, background: plan.accent }}/>
+          <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #f0ede8' }}>
+            <div className="mono" style={{ fontSize: 9, color: '#a5a5a5', letterSpacing: '0.08em', marginBottom: 4 }}>TRIPCRAFT · 旅行プラン</div>
+            <div className="serif" style={{ fontSize: 20, fontWeight: 500, lineHeight: 1.25 }}>{plan.title}</div>
+            <div style={{ fontSize: 12, color: '#7a7a7a', marginTop: 2 }}>{plan.tagline}</div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+              {plan.days?.[0]?.date && <div style={{ fontSize: 11, color: '#3a3a3a' }}><span style={{ color: '#a5a5a5' }}>出発 </span>{plan.days[0].date}</div>}
+              <div style={{ fontSize: 11, color: '#3a3a3a' }}><span style={{ color: '#a5a5a5' }}>スポット </span>{plan.meta.spots}箇所</div>
+              <div style={{ fontSize: 11, color: '#3a3a3a' }}><span style={{ color: '#a5a5a5' }}>歩行 </span>{plan.meta.walk}</div>
             </div>
-            {plan.highlights?.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 10, color: '#a5a5a5', marginBottom: 6 }}>ハイライト</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {plan.highlights.map((h, i) => (
-                    <div key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: '#f5f2ec', color: '#3a3a3a' }}>{h}</div>
-                  ))}
+          </div>
+          {/* SVG地図（html2canvas対応） */}
+          {(() => {
+            const seen = new Set();
+            const pins = plan.days.flatMap(day =>
+              day.items.filter(it => it.spot && MAP_PINS[it.spot] && !seen.has(it.spot) && seen.add(it.spot))
+                .map((it, i) => ({ ...MAP_PINS[it.spot], id: it.spot, n: i + 1 }))
+            );
+            return pins.length > 0
+              ? <MapView pins={pins} route={pins} height={180}/>
+              : null;
+          })()}
+          {/* タイムライン */}
+          <div style={{ padding: '10px 16px 14px' }}>
+            {plan.days.map((day, di) => (
+              <div key={di} style={{ marginBottom: di < plan.days.length - 1 ? 10 : 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: plan.accent, marginBottom: 4, letterSpacing: '0.04em' }}>
+                  {day.label} · {day.sub}
                 </div>
+                {day.items.filter(it => it.type === 'stay').map((it, ii) => (
+                  <div key={ii} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', paddingLeft: 4, marginBottom: 3 }}>
+                    <div className="mono" style={{ fontSize: 10, color: '#a5a5a5', flexShrink: 0, paddingTop: 1 }}>{it.t}</div>
+                    <div style={{ fontSize: 11, color: '#141414', lineHeight: 1.4 }}>{it.title}</div>
+                  </div>
+                ))}
               </div>
-            )}
-            <div style={{ paddingTop: 12, borderTop: '1px solid #efede8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="mono" style={{ fontSize: 10, color: '#a5a5a5' }}>by TripCraft AI</div>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: plan.accent }}/>
+            ))}
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #f0ede8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="mono" style={{ fontSize: 9, color: '#c0bdb7' }}>by TripCraft AI</div>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: plan.accent }}/>
             </div>
           </div>
         </div>
